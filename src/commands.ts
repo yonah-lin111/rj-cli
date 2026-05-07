@@ -66,6 +66,7 @@ export function helpText(): string {
   const keybindings = [
     "Keybindings:",
     "Ctrl+C".padEnd(16) + "Clear input, or exit if empty",
+    "Ctrl+Z".padEnd(16) + "Suspend process (background)",
     "Esc Esc".padEnd(16) + "Cancel running AI request",
     "↑ / ↓".padEnd(16) + "Navigate input history",
   ];

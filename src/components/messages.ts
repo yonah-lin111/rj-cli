@@ -32,7 +32,8 @@ const textStyles: Record<MessageKind, DefaultTextStyle> = {
 
 function messageHeader(message: Message): string {
   const label = message.label ?? message.kind;
-  return `${colors[message.kind](label)} ${theme.dim("│")}`;
+  return `${colors[message.kind](label + ":")}`;
+
 }
 
 function renderMarkdown(text: string, width: number, style: DefaultTextStyle): string[] {
