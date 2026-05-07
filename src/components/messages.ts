@@ -22,9 +22,9 @@ const colors: Record<MessageKind, (text: string) => string> = {
 };
 
 const textStyles: Record<MessageKind, DefaultTextStyle> = {
-  user: { color: theme.user },
+  user: {},
   assistant: {},
-  system: { color: theme.system },
+  system: {},
   command: { color: theme.bashMode },
   error: { color: theme.error },
   warning: { color: theme.warning },

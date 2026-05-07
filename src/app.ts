@@ -191,6 +191,15 @@ export class RJApp {
 
   private setupInputHandlers(): void {
     this.tui.addInputListener((data) => {
+      if (matchesKey(data, "ctrl+c")) {
+        if (this.editor.getText().length > 0) {
+          this.editor.setText("");
+          this.requestRender();
+        } else {
+          this.stop(0);
+        }
+        return { consume: true };
+      }
       if (!matchesKey(data, "escape")) return;
       const now = Date.now();
       const isDoubleEscape = now - this.lastEscapeAt <= 500;
@@ -202,7 +211,14 @@ export class RJApp {
   }
 
   private setupSignals(): void {
-    process.on("SIGINT", () => this.stop(0));
+    process.on("SIGINT", () => {
+      if (this.editor.getText().length > 0) {
+        this.editor.setText("");
+        this.requestRender();
+      } else {
+        this.stop(0);
+      }
+    });
     process.on("SIGTERM", () => this.stop(0));
   }
 
