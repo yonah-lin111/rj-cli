@@ -1,4 +1,4 @@
-import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, type Focusable, type OverlayHandle, type SelectItem } from "@mariozechner/pi-tui";
+import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, type Focusable, type OverlayHandle, type SelectItem } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
 import { streamChat, type ChatHistoryMessage } from "./ai.js";
 import { formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory, saveDefaultModel, savePromptHistory, type RJConfig, type RJModelConfig } from "./config.js";
@@ -144,6 +144,8 @@ export class RJApp {
   private state: AppState = createInitialState(this.config);
 
   async start(): Promise<void> {
+    const kb = new KeybindingsManager(TUI_KEYBINDINGS, { "tui.editor.undo": ["ctrl+-", "ctrl+z"] });
+    setKeybindings(kb);
     this.setupLayout();
     this.setupEditor();
     this.setupInputHandlers();
