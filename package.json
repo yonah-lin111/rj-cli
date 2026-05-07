@@ -1,0 +1,27 @@
+{
+  "name": "rj-cli",
+  "version": "0.1.0",
+  "description": "A basic RJ interactive CLI",
+  "type": "module",
+  "bin": {
+    "rj": "dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-tui": "^0.73.0",
+    "chalk": "^5.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

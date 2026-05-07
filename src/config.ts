@@ -1,0 +1,137 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export interface RJModelConfig {
+  id: string;
+  name: string;
+  contextWindow: number;
+  outputLimit: number;
+}
+
+export interface RJProviderConfig {
+  id: string;
+  name: string;
+  npm?: string;
+  baseURL?: string;
+  apiKey?: string;
+  models: RJModelConfig[];
+}
+
+export interface RJConfig {
+  defaultProvider: string;
+  defaultModel: string;
+  providers: RJProviderConfig[];
+  configPath: string;
+}
+
+interface RawRJConfig {
+  defaultProvider?: unknown;
+  defaultModel?: unknown;
+  providers?: unknown;
+}
+
+const configPath = join(homedir(), ".RJ", "config.json");
+
+const fallbackConfig: RJConfig = {
+  defaultProvider: "mock",
+  defaultModel: "mock-sonnet",
+  providers: [
+    {
+      id: "mock",
+      name: "Mock",
+      models: [{ id: "mock-sonnet", name: "mock-sonnet", contextWindow: 200000, outputLimit: 64000 }],
+    },
+  ],
+  configPath,
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function readString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function parseModel(value: unknown): RJModelConfig | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = readString(record, "id");
+  const name = readString(record, "name") ?? id;
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    contextWindow: readNumber(record, "contextWindow") ?? 200000,
+    outputLimit: readNumber(record, "outputLimit") ?? 64000,
+  };
+}
+
+function parseProvider(value: unknown): RJProviderConfig | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = readString(record, "id");
+  const name = readString(record, "name") ?? id;
+  const rawModels = Array.isArray(record.models) ? record.models : [];
+  const models = rawModels.map(parseModel).filter((model): model is RJModelConfig => Boolean(model));
+  if (!id || !name || models.length === 0) return null;
+  return {
+    id,
+    name,
+    npm: readString(record, "npm"),
+    baseURL: readString(record, "baseURL"),
+    apiKey: readString(record, "apiKey"),
+    models,
+  };
+}
+
+export function loadConfig(): RJConfig {
+  if (!existsSync(configPath)) return fallbackConfig;
+
+  try {
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as RawRJConfig;
+    const root = asRecord(raw);
+    if (!root) return fallbackConfig;
+
+    const providers = Array.isArray(root.providers)
+      ? root.providers.map(parseProvider).filter((provider): provider is RJProviderConfig => Boolean(provider))
+      : [];
+    if (providers.length === 0) return fallbackConfig;
+
+    const defaultProvider =
+      readString(root, "defaultProvider") && providers.some((provider) => provider.id === readString(root, "defaultProvider"))
+        ? readString(root, "defaultProvider")!
+        : providers[0]!.id;
+    const provider = providers.find((item) => item.id === defaultProvider) ?? providers[0]!;
+    const configuredDefaultModel = readString(root, "defaultModel");
+    const defaultModel =
+      configuredDefaultModel && provider.models.some((model) => model.id === configuredDefaultModel)
+        ? configuredDefaultModel
+        : provider.models[0]!.id;
+
+    return { defaultProvider, defaultModel, providers, configPath };
+  } catch {
+    return fallbackConfig;
+  }
+}
+
+export function getProvider(config: RJConfig, providerId: string): RJProviderConfig {
+  return config.providers.find((provider) => provider.id === providerId) ?? config.providers[0]!;
+}
+
+export function getModel(provider: RJProviderConfig, modelId: string): RJModelConfig {
+  return provider.models.find((model) => model.id === modelId) ?? provider.models[0]!;
+}
+
+export function formatContextWindow(tokens: number): string {
+  if (tokens >= 1000000) return `${Number((tokens / 1000000).toFixed(1))}M`;
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
+  return String(tokens);
+}
