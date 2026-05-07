@@ -10,6 +10,8 @@ export const theme = {
   bashMode: chalk.hex("#c4b5fd"),
   user: chalk.hex("#93c5fd"),
   assistant: chalk.hex("#e5e7eb"),
+  thinkingLabel: chalk.hex("#b45309"),
+  thinkingText: chalk.hex("#808080").italic,
   system: chalk.hex("#cbd5e1"),
   bold: chalk.bold,
 };

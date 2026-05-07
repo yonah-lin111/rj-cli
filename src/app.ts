@@ -1,6 +1,6 @@
 import { CombinedAutocompleteProvider, Container, Editor, ProcessTerminal, Spacer, Text, TUI } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
-import { completeChat, type ChatHistoryMessage } from "./ai.js";
+import { streamChat, type ChatHistoryMessage } from "./ai.js";
 import { formatContextWindow, getModel, getProvider, loadConfig, type RJConfig } from "./config.js";
 import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./commands.js";
 import { Footer } from "./components/footer.js";
@@ -150,16 +150,26 @@ export class RJApp {
     this.status.setText(theme.assistant(`Thinking with ${model.id}...`));
     this.requestRender();
 
+    let assistant: Message | undefined;
+    let assistantIndex = -1;
     try {
-      const reply = await completeChat({
+      assistantIndex = this.messages.length;
+      assistant = this.addMessage("assistant", "", "assistant");
+      await streamChat({
         provider,
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
+        onDelta: (delta) => {
+          if (!assistant) return;
+          if (delta.thinking) assistant.thinking = `${assistant.thinking ?? ""}${delta.thinking}`;
+          if (delta.content) assistant.text += delta.content;
+          this.requestRender();
+        },
       });
-      this.addMessage("assistant", reply, "assistant");
       this.state.messageCount++;
     } catch (error) {
+      if (assistant && !assistant.text.trim() && !assistant.thinking?.trim()) this.messages.splice(assistantIndex, 1);
       const message = error instanceof Error ? error.message : String(error);
       this.addMessage("error", message, "error");
     } finally {
@@ -171,8 +181,8 @@ export class RJApp {
 
   private chatHistory(): ChatHistoryMessage[] {
     return this.messages
-      .filter((message) => message.kind === "user" || message.kind === "assistant")
-      .map((message) => ({ role: message.kind as "user" | "assistant", content: message.text }));
+      .filter((message) => (message.kind === "user" || message.kind === "assistant") && message.text.trim())
+      .map((message) => ({ role: message.kind as "user" | "assistant", content: message.text.trim() }));
   }
 
   private handleSlash(text: string): void {
@@ -253,8 +263,10 @@ export class RJApp {
     this.state.outputLimit = model.outputLimit;
   }
 
-  private addMessage(kind: Message["kind"], text: string, label?: string): void {
-    this.messages.push({ kind, text, label });
+  private addMessage(kind: Message["kind"], text: string, label?: string): Message {
+    const message: Message = { kind, text, label };
+    this.messages.push(message);
+    return message;
   }
 
   private refreshChat(): void {

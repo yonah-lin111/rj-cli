@@ -8,6 +8,7 @@ export interface Message {
   kind: MessageKind;
   text: string;
   label?: string;
+  thinking?: string;
 }
 
 const colors: Record<MessageKind, (text: string) => string> = {
@@ -19,9 +20,21 @@ const colors: Record<MessageKind, (text: string) => string> = {
   warning: theme.warning,
 };
 
-export function formatMessage(message: Message): string {
+function messageHeader(message: Message): string {
   const label = message.label ?? message.kind;
-  return `${colors[message.kind](label)} ${theme.dim("│")} ${message.text}`;
+  return `${colors[message.kind](label)} ${theme.dim("│")}`;
+}
+
+export function formatMessage(message: Message): string {
+  const header = messageHeader(message);
+  if (message.kind !== "assistant") return `${header} ${message.text}`;
+
+  const parts = [header];
+  if (message.thinking?.trim()) {
+    parts.push(`${theme.thinkingLabel("thinking：")}\n${theme.thinkingText(message.thinking.trimEnd())}`);
+  }
+  if (message.text.trim()) parts.push(theme.assistant(message.text.trimEnd()));
+  return parts.join("\n");
 }
 
 export class MessagesView implements Component {
@@ -38,8 +51,10 @@ export class MessagesView implements Component {
     const lines: string[] = [];
     for (const message of messages) {
       const contentWidth = Math.max(20, width - 2);
-      const wrapped = wrapTextWithAnsi(formatMessage(message), contentWidth);
-      for (const line of wrapped) lines.push(` ${truncateToWidth(line, width - 1, "...")}`);
+      for (const part of formatMessage(message).split("\n")) {
+        const wrapped = wrapTextWithAnsi(part, contentWidth);
+        for (const line of wrapped) lines.push(` ${truncateToWidth(line, width - 1, "...")}`);
+      }
       lines.push("");
     }
     if (lines[lines.length - 1] === "") lines.pop();
