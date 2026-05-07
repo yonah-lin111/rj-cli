@@ -3,17 +3,18 @@ import type { MarkdownTheme } from "@mariozechner/pi-tui";
 
 export const theme = {
   accent: chalk.hex("#7dd3fc"),
+  logo: chalk.hex("#2563eb").bold,
   dim: chalk.dim,
   muted: chalk.hex("#64748b"),
   success: chalk.hex("#86efac"),
   error: chalk.hex("#fca5a5"),
   warning: chalk.hex("#fde68a"),
   bashMode: chalk.hex("#c4b5fd"),
-  user: chalk.hex("#93c5fd"),
-  assistant: chalk.hex("#e5e7eb"),
+  user: chalk.hex("#60a5fa"),
+  assistant: chalk.hex("#86efac"),
   thinkingLabel: chalk.hex("#b45309"),
   thinkingText: chalk.hex("#808080").italic,
-  system: chalk.hex("#cbd5e1"),
+  system: chalk.hex("#fef3c7"),
   bold: chalk.bold,
 };
 

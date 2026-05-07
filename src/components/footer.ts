@@ -4,8 +4,6 @@ import { theme } from "../theme.js";
 
 export interface FooterState {
   cwd: string;
-  messageCount: number;
-  commandCount: number;
   model: string;
   contextDisplay: string;
   contextPercent: string;
@@ -25,7 +23,7 @@ export class Footer implements Component {
   render(width: number): string[] {
     const state = this.getState();
     const pwd = truncateToWidth(theme.dim(compactPath(state.cwd)), width, theme.dim("..."));
-    const left = theme.dim(`messages ${state.messageCount}  commands ${state.commandCount}  ${state.contextPercent}%/${state.contextDisplay} (auto)`);
+    const left = theme.dim(`${state.contextPercent}%/${state.contextDisplay} (auto)`);
     const right = theme.dim(state.model);
     const leftWidth = visibleWidth(left);
     const rightWidth = visibleWidth(right);

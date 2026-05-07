@@ -47,14 +47,15 @@ function createInitialState(config: RJConfig): AppState {
 }
 
 function headerText(): string {
-  const logo = `${theme.bold(theme.accent("RJ"))}${theme.dim(" v0.1.0")}`;
-  const compact = [
-    `${theme.dim("Ctrl+C")} interrupt/exit`,
-    `${theme.dim("/")} commands`,
-    `${theme.dim("!")} bash`,
-    `${theme.dim("!!")} bash (no context)`,
-  ].join(theme.muted(" · "));
-  return `${logo}\n${compact}\n${theme.dim("Press /help for commands. Ask a question to get an AI reply.")}`;
+  const logo = [
+    "██████╗        ██╗",
+    "██╔══██╗       ██║",
+    "██████╔╝       ██║",
+    "██╔══██╗ ██╗   ██║",
+    "██║  ██║ ╚██████╔╝",
+    "╚═╝  ╚═╝  ╚═════╝ ",
+  ].join("\n");
+  return `${theme.logo(logo)} ${theme.dim("v0.1.0")}`;
 }
 
 export class RJApp {

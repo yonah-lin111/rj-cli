@@ -22,7 +22,7 @@ const colors: Record<MessageKind, (text: string) => string> = {
 
 const textStyles: Record<MessageKind, DefaultTextStyle> = {
   user: { color: theme.user },
-  assistant: { color: theme.assistant },
+  assistant: {},
   system: { color: theme.system },
   command: { color: theme.bashMode },
   error: { color: theme.error },
@@ -64,7 +64,7 @@ export class MessagesView implements Component {
   render(width: number): string[] {
     const messages = this.getMessages().slice(-this.maxRendered);
     if (messages.length === 0) {
-      return [theme.dim("  Ask RJ anything, type /help for commands, or !pwd to run shell commands.")];
+      return [theme.dim("  Ask RJ anything or type /help for commands.")];
     }
 
     const lines: string[] = [];
