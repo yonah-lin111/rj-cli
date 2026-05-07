@@ -12,8 +12,8 @@ export const theme = {
   bashMode: chalk.hex("#c4b5fd"),
   user: chalk.hex("#60a5fa"),
   assistant: chalk.hex("#86efac"),
-  thinkingLabel: chalk.hex("#b45309"),
-  thinkingText: chalk.hex("#808080").italic,
+  thinkingLabel: chalk.hex("#f7a23b").italic,
+  thinkingText: chalk.hex("#a3a3a3").italic,
   system: chalk.hex("#fef3c7"),
   bold: chalk.bold,
 };
