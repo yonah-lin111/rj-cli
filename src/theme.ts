@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import type { MarkdownTheme } from "@mariozechner/pi-tui";
 
 export const theme = {
   accent: chalk.hex("#7dd3fc"),
@@ -14,6 +15,23 @@ export const theme = {
   thinkingText: chalk.hex("#808080").italic,
   system: chalk.hex("#cbd5e1"),
   bold: chalk.bold,
+};
+
+export const markdownTheme: MarkdownTheme = {
+  heading: chalk.bold.cyan,
+  link: chalk.blue,
+  linkUrl: chalk.dim,
+  code: chalk.yellow,
+  codeBlock: chalk.green,
+  codeBlockBorder: chalk.dim,
+  quote: chalk.italic,
+  quoteBorder: chalk.dim,
+  hr: chalk.dim,
+  listBullet: chalk.cyan,
+  bold: chalk.bold,
+  italic: chalk.italic,
+  strikethrough: chalk.strikethrough,
+  underline: chalk.underline,
 };
 
 export const editorTheme = {

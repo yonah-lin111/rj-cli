@@ -1,4 +1,4 @@
-import { CombinedAutocompleteProvider, Container, Editor, ProcessTerminal, Spacer, Text, TUI } from "@mariozechner/pi-tui";
+import { CombinedAutocompleteProvider, Container, Editor, Loader, ProcessTerminal, Spacer, Text, TUI } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
 import { streamChat, type ChatHistoryMessage } from "./ai.js";
 import { formatContextWindow, getModel, getProvider, loadConfig, type RJConfig } from "./config.js";
@@ -57,7 +57,8 @@ export class RJApp {
   private tui = new TUI(this.terminal);
   private root = new Container();
   private chat = new Container();
-  private status = new Text("", 1, 0);
+  private status = new Container();
+  private loadingAnimation?: Loader;
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
   private runningAI = false;
@@ -147,7 +148,7 @@ export class RJApp {
 
     const provider = getProvider(this.config, this.state.provider);
     const model = getModel(provider, this.state.model);
-    this.status.setText(theme.assistant(`Thinking with ${model.id}...`));
+    this.startLoading(`Working with ${model.id}...`);
     this.requestRender();
 
     let assistant: Message | undefined;
@@ -174,7 +175,7 @@ export class RJApp {
       this.addMessage("error", message, "error");
     } finally {
       this.runningAI = false;
-      this.status.setText("");
+      this.stopLoading();
       this.requestRender();
     }
   }
@@ -234,7 +235,7 @@ export class RJApp {
 
     this.runningBash = true;
     this.state.commandCount++;
-    this.status.setText(theme.bashMode(`Running ${noContext ? "bash (no context)" : "bash"}: ${command}`));
+    this.startLoading(`Running ${noContext ? "bash (no context)" : "bash"}: ${command}`, theme.bashMode);
     this.addMessage("command", `$ ${command}${noContext ? "  [no context]" : ""}`, "bash");
     this.requestRender();
 
@@ -250,9 +251,24 @@ export class RJApp {
       this.addMessage("error", message, "error");
     } finally {
       this.runningBash = false;
-      this.status.setText("");
+      this.stopLoading();
       this.requestRender();
     }
+  }
+
+  private startLoading(message: string, spinnerColor: (text: string) => string = theme.accent): void {
+    this.stopLoading();
+    this.loadingAnimation = new Loader(this.tui, spinnerColor, theme.muted, message, {
+      frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+      intervalMs: 80,
+    });
+    this.status.addChild(this.loadingAnimation);
+  }
+
+  private stopLoading(): void {
+    this.loadingAnimation?.stop();
+    this.loadingAnimation = undefined;
+    this.status.clear();
   }
 
   private setModel(modelId: string): void {

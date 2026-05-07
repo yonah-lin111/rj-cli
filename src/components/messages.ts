@@ -1,6 +1,6 @@
-import type { Component } from "@mariozechner/pi-tui";
-import { truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
-import { theme } from "../theme.js";
+import type { Component, DefaultTextStyle } from "@mariozechner/pi-tui";
+import { Markdown, truncateToWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
+import { markdownTheme, theme } from "../theme.js";
 
 export type MessageKind = "user" | "assistant" | "system" | "command" | "error" | "warning";
 
@@ -20,21 +20,40 @@ const colors: Record<MessageKind, (text: string) => string> = {
   warning: theme.warning,
 };
 
+const textStyles: Record<MessageKind, DefaultTextStyle> = {
+  user: { color: theme.user },
+  assistant: { color: theme.assistant },
+  system: { color: theme.system },
+  command: { color: theme.bashMode },
+  error: { color: theme.error },
+  warning: { color: theme.warning },
+};
+
 function messageHeader(message: Message): string {
   const label = message.label ?? message.kind;
   return `${colors[message.kind](label)} ${theme.dim("│")}`;
 }
 
-export function formatMessage(message: Message): string {
-  const header = messageHeader(message);
-  if (message.kind !== "assistant") return `${header} ${message.text}`;
+function renderMarkdown(text: string, width: number, style: DefaultTextStyle): string[] {
+  return new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
+}
 
-  const parts = [header];
-  if (message.thinking?.trim()) {
-    parts.push(`${theme.thinkingLabel("thinking：")}\n${theme.thinkingText(message.thinking.trimEnd())}`);
+export function formatMessage(message: Message, width = 80): string[] {
+  const header = messageHeader(message);
+  const contentWidth = Math.max(20, width - 2);
+
+  if (message.kind !== "assistant") {
+    return [header, ...renderMarkdown(message.text, contentWidth, textStyles[message.kind])];
   }
-  if (message.text.trim()) parts.push(theme.assistant(message.text.trimEnd()));
-  return parts.join("\n");
+
+  const lines = [header];
+  if (message.thinking?.trim()) {
+    lines.push(`${theme.thinkingLabel("thinking：")}`);
+    lines.push(...renderMarkdown(message.thinking.trimEnd(), contentWidth, { color: theme.thinkingText, italic: true }));
+    if (message.text.trim()) lines.push("");
+  }
+  if (message.text.trim()) lines.push(...renderMarkdown(message.text.trimEnd(), contentWidth, textStyles.assistant));
+  return lines;
 }
 
 export class MessagesView implements Component {
@@ -50,9 +69,8 @@ export class MessagesView implements Component {
 
     const lines: string[] = [];
     for (const message of messages) {
-      const contentWidth = Math.max(20, width - 2);
-      for (const part of formatMessage(message).split("\n")) {
-        const wrapped = wrapTextWithAnsi(part, contentWidth);
+      for (const part of formatMessage(message, width)) {
+        const wrapped = wrapTextWithAnsi(part, Math.max(20, width - 2));
         for (const line of wrapped) lines.push(` ${truncateToWidth(line, width - 1, "...")}`);
       }
       lines.push("");
