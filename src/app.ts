@@ -348,6 +348,12 @@ export class RJApp {
       return;
     }
 
+    if (action.type === "system-messages") {
+      for (const message of action.messages) this.addMessage("system", message);
+      this.requestRender();
+      return;
+    }
+
     for (const message of action.messages) this.showPrompt(message);
     this.requestRender();
   }

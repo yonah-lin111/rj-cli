@@ -16,6 +16,7 @@ export interface AppCommandContext {
 
 export type CommandAction =
   | { type: "messages"; messages: string[] }
+  | { type: "system-messages"; messages: string[] }
   | { type: "show-model-selector"; search: string }
   | { type: "clear"; messages?: string[] }
   | { type: "quit" };
@@ -32,7 +33,7 @@ const commandList: SlashCommand[] = [
     name: "/help",
     usage: "/help",
     description: "Show available commands.",
-    handler: () => ({ type: "messages", messages: [helpText()] }),
+    handler: () => ({ type: "system-messages", messages: [helpText()] }),
   },
   {
     name: "/model",
