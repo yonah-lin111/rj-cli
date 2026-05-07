@@ -35,73 +35,16 @@ const commandList: SlashCommand[] = [
     handler: () => ({ type: "messages", messages: [helpText()] }),
   },
   {
-    name: "/hotkeys",
-    usage: "/hotkeys",
-    description: "Show basic keyboard shortcuts.",
-    handler: () => ({
-      type: "messages",
-      messages: ["Hotkeys:\nEnter submit\nShift+Enter newline\nCtrl+C exit\n/ commands\n! bash\n!! bash (no-context visual label)"],
-    }),
-  },
-  {
-    name: "/session",
-    usage: "/session",
-    description: "Show current session information.",
-    handler: (_args, context) => ({
-      type: "messages",
-      messages: [
-        [
-          "Session:",
-          `started ${context.startedAt.toLocaleString()}`,
-          `cwd ${context.cwd}`,
-          `provider ${context.providerName} (${context.provider})`,
-          `model ${context.model}`,
-          `context ${context.contextPercent}%/${context.contextDisplay}`,
-          `context tokens ${context.contextTokens}`,
-          `output ${context.outputLimit}`,
-          `messages ${context.messageCount}`,
-          `commands ${context.commandCount}`,
-        ].join("\n"),
-      ],
-    }),
-  },
-  {
     name: "/model",
     usage: "/model [search]",
     description: "Open the model selector.",
     handler: (args) => ({ type: "show-model-selector", search: args.join(" ").trim() }),
   },
   {
-    name: "/settings",
-    usage: "/settings",
-    description: "Show basic local settings.",
-    handler: (_args, context) => ({
-      type: "messages",
-      messages: [
-        [
-          "Settings:",
-          `cwd ${context.cwd}`,
-          `shell ${process.env.SHELL || "/bin/zsh"}`,
-          `config ${context.configPath}`,
-          `provider ${context.providerName} (${context.provider})`,
-          `model ${context.model}`,
-          `context ${context.contextPercent}%/${context.contextDisplay}`,
-          `output ${context.outputLimit}`,
-        ].join("\n"),
-      ],
-    }),
-  },
-  {
-    name: "/new",
-    usage: "/new",
-    description: "Start a new empty chat.",
-    handler: () => ({ type: "clear", messages: ["Started a new chat."] }),
-  },
-  {
     name: "/clear",
     usage: "/clear",
-    description: "Clear the chat view.",
-    handler: () => ({ type: "clear", messages: ["Chat cleared."] }),
+    description: "Start a new empty chat.",
+    handler: () => ({ type: "clear", messages: ["Started a new chat."] }),
   },
   {
     name: "/quit",
