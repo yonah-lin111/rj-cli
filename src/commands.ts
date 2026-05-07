@@ -4,6 +4,8 @@ export interface AppCommandContext {
   providerName: string;
   model: string;
   contextDisplay: string;
+  contextPercent: string;
+  contextTokens: number;
   outputLimit: number;
   configPath: string;
   availableModels: string[];
@@ -54,7 +56,8 @@ const commandList: SlashCommand[] = [
           `cwd ${context.cwd}`,
           `provider ${context.providerName} (${context.provider})`,
           `model ${context.model}`,
-          `context ${context.contextDisplay}`,
+          `context ${context.contextPercent}%/${context.contextDisplay} (auto)`,
+          `context tokens ${context.contextTokens}`,
           `output ${context.outputLimit}`,
           `messages ${context.messageCount}`,
           `commands ${context.commandCount}`,
@@ -89,7 +92,7 @@ const commandList: SlashCommand[] = [
           `config ${context.configPath}`,
           `provider ${context.providerName} (${context.provider})`,
           `model ${context.model}`,
-          `context 0.0%/${context.contextDisplay} (auto)`,
+          `context ${context.contextPercent}%/${context.contextDisplay} (auto)`,
           `output ${context.outputLimit}`,
         ].join("\n"),
       ],

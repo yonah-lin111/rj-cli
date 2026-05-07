@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface RJModelConfig {
   id: string;
@@ -128,6 +128,24 @@ export function getProvider(config: RJConfig, providerId: string): RJProviderCon
 
 export function getModel(provider: RJProviderConfig, modelId: string): RJModelConfig {
   return provider.models.find((model) => model.id === modelId) ?? provider.models[0]!;
+}
+
+export function saveDefaultModel(config: RJConfig, providerId: string, modelId: string): RJConfig {
+  const provider = getProvider(config, providerId);
+  const model = getModel(provider, modelId);
+  const updated: RJConfig = {
+    ...config,
+    defaultProvider: provider.id,
+    defaultModel: model.id,
+  };
+  const output: RawRJConfig = {
+    defaultProvider: updated.defaultProvider,
+    defaultModel: updated.defaultModel,
+    providers: updated.providers,
+  };
+  mkdirSync(dirname(updated.configPath), { recursive: true });
+  writeFileSync(updated.configPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+  return updated;
 }
 
 export function formatContextWindow(tokens: number): string {

@@ -1,7 +1,7 @@
 import { CombinedAutocompleteProvider, Container, Editor, Loader, ProcessTerminal, Spacer, Text, TUI } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
 import { streamChat, type ChatHistoryMessage } from "./ai.js";
-import { formatContextWindow, getModel, getProvider, loadConfig, type RJConfig } from "./config.js";
+import { formatContextWindow, getModel, getProvider, loadConfig, saveDefaultModel, type RJConfig } from "./config.js";
 import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./commands.js";
 import { Footer } from "./components/footer.js";
 import { MessagesView, type Message } from "./components/messages.js";
@@ -13,6 +13,9 @@ export interface AppState {
   providerName: string;
   model: string;
   contextDisplay: string;
+  contextPercent: string;
+  contextTokens: number;
+  contextWindow: number;
   outputLimit: number;
   configPath: string;
   availableModels: string[];
@@ -31,6 +34,9 @@ function createInitialState(config: RJConfig): AppState {
     providerName: provider.name,
     model: model.id,
     contextDisplay: formatContextWindow(model.contextWindow),
+    contextPercent: "0.0",
+    contextTokens: 0,
+    contextWindow: model.contextWindow,
     outputLimit: model.outputLimit,
     configPath: config.configPath,
     availableModels: provider.models.map((item) => item.id),
@@ -145,6 +151,7 @@ export class RJApp {
     this.runningAI = true;
     this.addMessage("user", text, "user");
     this.state.messageCount++;
+    this.updateContextUsage();
 
     const provider = getProvider(this.config, this.state.provider);
     const model = getModel(provider, this.state.model);
@@ -165,10 +172,12 @@ export class RJApp {
           if (!assistant) return;
           if (delta.thinking) assistant.thinking = `${assistant.thinking ?? ""}${delta.thinking}`;
           if (delta.content) assistant.text += delta.content;
+          this.updateContextUsage();
           this.requestRender();
         },
       });
       this.state.messageCount++;
+      this.updateContextUsage();
     } catch (error) {
       if (assistant && !assistant.text.trim() && !assistant.thinking?.trim()) this.messages.splice(assistantIndex, 1);
       const message = error instanceof Error ? error.message : String(error);
@@ -186,6 +195,21 @@ export class RJApp {
       .map((message) => ({ role: message.kind as "user" | "assistant", content: message.text.trim() }));
   }
 
+  private updateContextUsage(): void {
+    const tokens = this.estimateContextTokens();
+    const percent = this.state.contextWindow > 0 ? (tokens / this.state.contextWindow) * 100 : 0;
+    this.state.contextTokens = tokens;
+    this.state.contextPercent = percent.toFixed(1);
+  }
+
+  private estimateContextTokens(): number {
+    return this.chatHistory().reduce((total, message) => total + Math.ceil(message.content.length / 4) + 4, 0);
+  }
+
+  private contextUsageDisplay(): string {
+    return `${this.state.contextPercent}%/${this.state.contextDisplay} (auto)`;
+  }
+
   private handleSlash(text: string): void {
     this.state.commandCount++;
     const context: AppCommandContext = { ...this.state };
@@ -200,6 +224,7 @@ export class RJApp {
       this.messages = [];
       this.state.messageCount = 0;
       this.state.commandCount = 0;
+      this.updateContextUsage();
       if (action.messages) {
         for (const message of action.messages) this.addMessage("system", message, "system");
       }
@@ -274,9 +299,14 @@ export class RJApp {
   private setModel(modelId: string): void {
     const provider = getProvider(this.config, this.state.provider);
     const model = getModel(provider, modelId);
+    this.config = saveDefaultModel(this.config, provider.id, model.id);
+    this.state.provider = provider.id;
+    this.state.providerName = provider.name;
     this.state.model = model.id;
     this.state.contextDisplay = formatContextWindow(model.contextWindow);
+    this.state.contextWindow = model.contextWindow;
     this.state.outputLimit = model.outputLimit;
+    this.updateContextUsage();
   }
 
   private addMessage(kind: Message["kind"], text: string, label?: string): Message {
