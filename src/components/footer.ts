@@ -22,9 +22,9 @@ export class Footer implements Component {
 
   render(width: number): string[] {
     const state = this.getState();
-    const pwd = truncateToWidth(theme.dim(compactPath(state.cwd)), width, theme.dim("..."));
-    const left = theme.dim(`${state.contextPercent}%/${state.contextDisplay} (auto)`);
-    const right = theme.dim(state.model);
+    const usage = `${state.contextPercent}%/${state.contextDisplay}`;
+    const left = theme.dim(`${state.model} (${usage})`);
+    const right = truncateToWidth(theme.dim(compactPath(state.cwd)), width, theme.dim("..."));
     const leftWidth = visibleWidth(left);
     const rightWidth = visibleWidth(right);
 
@@ -37,6 +37,6 @@ export class Footer implements Component {
       stats = truncateToWidth(left, width, theme.dim("..."));
     }
 
-    return [pwd, stats];
+    return [stats];
   }
 }

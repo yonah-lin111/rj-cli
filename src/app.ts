@@ -208,7 +208,7 @@ export class RJApp {
   }
 
   private contextUsageDisplay(): string {
-    return `${this.state.contextPercent}%/${this.state.contextDisplay} (auto)`;
+    return `${this.state.contextPercent}%/${this.state.contextDisplay}`;
   }
 
   private handleSlash(text: string): void {
