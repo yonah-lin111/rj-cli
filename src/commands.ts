@@ -39,7 +39,10 @@ const commandList: SlashCommand[] = [
     name: "/model",
     usage: "/model [search]",
     description: "Open the model selector.",
-    handler: (args) => ({ type: "show-model-selector", search: args.join(" ").trim() }),
+    handler: (args) => ({
+      type: "show-model-selector",
+      search: args.join(" ").trim(),
+    }),
   },
   {
     name: "/clear",
@@ -60,14 +63,37 @@ export function getCommands(): SlashCommand[] {
 }
 
 export function helpText(): string {
-  return [`RJ commands:`, ...commandList.map((command) => `${command.usage.padEnd(16)} ${command.description}`), "", "Prefix with ! to run bash, e.g. !pwd"].join("\n");
+  const keybindings = [
+    "Keybindings:",
+    "Ctrl+C".padEnd(16) + "Clear input, or exit if empty",
+    "Esc Esc".padEnd(16) + "Cancel running AI request",
+    "↑ / ↓".padEnd(16) + "Navigate input history",
+  ];
+  return [
+    `RJ commands:`,
+    ...commandList.map(
+      (command) => `${command.usage.padEnd(16)} ${command.description}`,
+    ),
+    "",
+    ...keybindings,
+    "",
+    "Prefix with ! to run bash, e.g. !pwd",
+  ].join("\n");
 }
 
-export function executeSlashCommand(input: string, context: AppCommandContext): CommandAction {
+export function executeSlashCommand(
+  input: string,
+  context: AppCommandContext,
+): CommandAction {
   const [name = "", ...args] = input.trim().split(/\s+/);
   const command = commandList.find((item) => item.name === name);
   if (!command) {
-    return { type: "messages", messages: [`Unknown command: ${name}\nType /help to see available commands.`] };
+    return {
+      type: "messages",
+      messages: [
+        `Unknown command: ${name}\nType /help to see available commands.`,
+      ],
+    };
   }
   return command.handler(args, context);
 }
