@@ -7,6 +7,7 @@ export interface FooterState {
   model: string;
   contextDisplay: string;
   contextPercent: string;
+  prompt?: string;
 }
 
 function compactPath(cwd: string): string {
@@ -37,6 +38,8 @@ export class Footer implements Component {
       stats = truncateToWidth(left, width, theme.dim("..."));
     }
 
-    return [stats];
+    const lines = [stats];
+    if (state.prompt) lines.push(theme.systemPrompt(truncateToWidth(state.prompt, width, theme.dim("..."))));
+    return lines;
   }
 }

@@ -1,4 +1,4 @@
-import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, type Focusable, type OverlayHandle, type SelectItem } from "@mariozechner/pi-tui";
+import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, type Focusable, type OverlayHandle, type SelectItem } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
 import { streamChat, type ChatHistoryMessage } from "./ai.js";
 import { formatContextWindow, getModel, getProvider, loadConfig, saveDefaultModel, type RJConfig, type RJModelConfig } from "./config.js";
@@ -21,6 +21,7 @@ export interface AppState {
   availableModels: string[];
   messageCount: number;
   commandCount: number;
+  prompt?: string;
   startedAt: Date;
 }
 
@@ -134,12 +135,17 @@ export class RJApp {
   private messages: Message[] = [];
   private runningAI = false;
   private runningBash = false;
+  private activeAIAbort?: AbortController;
+  private activeQA?: { user: Message; assistant?: Message };
+  private lastEscapeAt = 0;
+  private promptTimer?: NodeJS.Timeout;
   private stopped = false;
   private state: AppState = createInitialState(this.config);
 
   async start(): Promise<void> {
     this.setupLayout();
     this.setupEditor();
+    this.setupInputHandlers();
     this.setupSignals();
     this.tui.start();
   }
@@ -183,6 +189,18 @@ export class RJApp {
     };
   }
 
+  private setupInputHandlers(): void {
+    this.tui.addInputListener((data) => {
+      if (!matchesKey(data, "escape")) return;
+      const now = Date.now();
+      const isDoubleEscape = now - this.lastEscapeAt <= 500;
+      this.lastEscapeAt = now;
+      if (!isDoubleEscape || !this.runningAI) return;
+      this.cancelAIResponse();
+      return { consume: true };
+    });
+  }
+
   private setupSignals(): void {
     process.on("SIGINT", () => this.stop(0));
     process.on("SIGTERM", () => this.stop(0));
@@ -214,7 +232,8 @@ export class RJApp {
     }
 
     this.runningAI = true;
-    this.addMessage("user", text, "user");
+    const user = this.addMessage("user", text, "user");
+    this.activeQA = { user };
     this.state.messageCount++;
     this.updateContextUsage();
 
@@ -225,14 +244,18 @@ export class RJApp {
 
     let assistant: Message | undefined;
     let assistantIndex = -1;
+    const abortController = new AbortController();
+    this.activeAIAbort = abortController;
     try {
       assistantIndex = this.messages.length;
       assistant = this.addMessage("assistant", "", "assistant");
+      if (this.activeQA) this.activeQA.assistant = assistant;
       await streamChat({
         provider,
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
+        signal: abortController.signal,
         onDelta: (delta) => {
           if (!assistant) return;
           if (delta.thinking) assistant.thinking = `${assistant.thinking ?? ""}${delta.thinking}`;
@@ -244,10 +267,13 @@ export class RJApp {
       this.state.messageCount++;
       this.updateContextUsage();
     } catch (error) {
+      if (abortController.signal.aborted) return;
       if (assistant && !assistant.text.trim() && !assistant.thinking?.trim()) this.messages.splice(assistantIndex, 1);
       const message = error instanceof Error ? error.message : String(error);
       this.addMessage("error", message, "error");
     } finally {
+      if (this.activeAIAbort === abortController) this.activeAIAbort = undefined;
+      this.activeQA = undefined;
       this.runningAI = false;
       this.stopLoading();
       this.requestRender();
@@ -275,6 +301,27 @@ export class RJApp {
     return `${this.state.contextPercent}%/${this.state.contextDisplay}`;
   }
 
+  private cancelAIResponse(): void {
+    if (!this.runningAI) return;
+    if (this.activeQA) {
+      this.activeQA.user.strikethrough = true;
+      if (this.activeQA.assistant) this.activeQA.assistant.strikethrough = true;
+    }
+    this.activeAIAbort?.abort();
+    this.showPrompt("Response cancelled");
+    this.requestRender();
+  }
+
+  private showPrompt(message: string): void {
+    if (this.promptTimer) clearTimeout(this.promptTimer);
+    this.state.prompt = message;
+    this.promptTimer = setTimeout(() => {
+      this.state.prompt = undefined;
+      this.promptTimer = undefined;
+      this.requestRender();
+    }, 3000);
+  }
+
   private handleSlash(text: string): void {
     this.state.commandCount++;
     const context: AppCommandContext = { ...this.state };
@@ -290,9 +337,7 @@ export class RJApp {
       this.state.messageCount = 0;
       this.state.commandCount = 0;
       this.updateContextUsage();
-      if (action.messages) {
-        for (const message of action.messages) this.addMessage("system", message, "system");
-      }
+      if (action.messages?.[0]) this.showPrompt(action.messages[0]);
       this.requestRender();
       return;
     }
@@ -303,7 +348,7 @@ export class RJApp {
       return;
     }
 
-    for (const message of action.messages) this.addMessage("system", message, "command");
+    for (const message of action.messages) this.showPrompt(message);
     this.requestRender();
   }
 
@@ -370,7 +415,7 @@ export class RJApp {
         this.modelSelector?.hide();
         this.modelSelector = undefined;
         this.setModel(modelId);
-        this.addMessage("system", `Model set to ${getModel(provider, modelId).name}`, "model");
+        this.showPrompt(`Model set to ${getModel(provider, modelId).name}`);
         this.requestRender();
       },
       () => {

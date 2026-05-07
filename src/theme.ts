@@ -15,6 +15,8 @@ export const theme = {
   thinkingLabel: chalk.hex("#f7a23b").italic,
   thinkingText: chalk.hex("#a3a3a3").italic,
   system: chalk.hex("#fef3c7"),
+  systemPrompt: chalk.hex("#fef3c7").italic,
+  strikethrough: chalk.strikethrough,
   bold: chalk.bold,
 };
 

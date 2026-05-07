@@ -9,6 +9,7 @@ export interface Message {
   text: string;
   label?: string;
   thinking?: string;
+  strikethrough?: boolean;
 }
 
 const colors: Record<MessageKind, (text: string) => string> = {
@@ -38,12 +39,17 @@ function renderMarkdown(text: string, width: number, style: DefaultTextStyle): s
   return new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
 }
 
+function applyMessageStyle(lines: string[], message: Message): string[] {
+  if (!message.strikethrough) return lines;
+  return lines.map((line) => theme.dim(theme.strikethrough(line)));
+}
+
 export function formatMessage(message: Message, width = 80): string[] {
   const header = messageHeader(message);
   const contentWidth = Math.max(20, width - 2);
 
   if (message.kind !== "assistant") {
-    return [header, ...renderMarkdown(message.text, contentWidth, textStyles[message.kind])];
+    return applyMessageStyle([header, ...renderMarkdown(message.text, contentWidth, textStyles[message.kind])], message);
   }
 
   const lines = [header];
@@ -53,7 +59,7 @@ export function formatMessage(message: Message, width = 80): string[] {
     if (message.text.trim()) lines.push("");
   }
   if (message.text.trim()) lines.push(...renderMarkdown(message.text.trimEnd(), contentWidth, textStyles.assistant));
-  return lines;
+  return applyMessageStyle(lines, message);
 }
 
 export class MessagesView implements Component {

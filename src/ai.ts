@@ -11,6 +11,7 @@ interface StreamChatOptions {
   model: string;
   messages: ChatHistoryMessage[];
   maxTokens: number;
+  signal?: AbortSignal;
   onDelta: (delta: ChatDelta) => void;
 }
 
@@ -36,17 +37,20 @@ function readTextField(record: Record<string, unknown>, keys: string[]): string 
 }
 
 export async function streamChat(options: StreamChatOptions): Promise<void> {
-  const { provider, model, messages, maxTokens, onDelta } = options;
+  const { provider, model, messages, maxTokens, signal, onDelta } = options;
   if (!provider.baseURL) throw new Error(`Provider ${provider.name} is missing baseURL.`);
   if (!provider.apiKey) throw new Error(`Provider ${provider.name} is missing apiKey.`);
 
   const client = new OpenAI({ baseURL: provider.baseURL, apiKey: provider.apiKey });
-  const stream = await client.chat.completions.create({
-    model,
-    messages,
-    max_tokens: clampMaxTokens(maxTokens),
-    stream: true,
-  });
+  const stream = await client.chat.completions.create(
+    {
+      model,
+      messages,
+      max_tokens: clampMaxTokens(maxTokens),
+      stream: true,
+    },
+    { signal },
+  );
 
   let hasOutput = false;
   for await (const chunk of stream) {
