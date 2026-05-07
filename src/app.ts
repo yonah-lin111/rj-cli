@@ -1,7 +1,7 @@
 import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, type Focusable, type OverlayHandle, type SelectItem } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
 import { streamChat, type ChatHistoryMessage } from "./ai.js";
-import { formatContextWindow, getModel, getProvider, loadConfig, saveDefaultModel, type RJConfig, type RJModelConfig } from "./config.js";
+import { formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory, saveDefaultModel, savePromptHistory, type RJConfig, type RJModelConfig } from "./config.js";
 import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./commands.js";
 import { Footer } from "./components/footer.js";
 import { MessagesView, type Message } from "./components/messages.js";
@@ -124,6 +124,7 @@ class ModelSelector extends Container implements Focusable {
 
 export class RJApp {
   private config = loadConfig();
+  private promptHistory: string[] = loadPromptHistory();
   private terminal = new ProcessTerminal();
   private tui = new TUI(this.terminal);
   private root = new Container();
@@ -184,6 +185,10 @@ export class RJApp {
       ),
     );
 
+    for (const entry of this.promptHistory) {
+      this.editor.addToHistory(entry);
+    }
+
     this.editor.onSubmit = (rawText) => {
       void this.handleSubmit(rawText);
     };
@@ -233,10 +238,18 @@ export class RJApp {
     }
 
     if (text.startsWith("!")) {
+      if (this.promptHistory.at(-1) !== text) {
+        this.promptHistory.push(text);
+        savePromptHistory(this.promptHistory);
+      }
       await this.handleBash(text);
       return;
     }
 
+    if (this.promptHistory.at(-1) !== text) {
+      this.promptHistory.push(text);
+      savePromptHistory(this.promptHistory);
+    }
     await this.handleChat(text);
   }
 

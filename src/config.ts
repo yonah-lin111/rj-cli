@@ -148,6 +148,26 @@ export function saveDefaultModel(config: RJConfig, providerId: string, modelId: 
   return updated;
 }
 
+const promptHistoryPath = join(homedir(), ".RJ", "prompt_history.json");
+const MAX_PROMPT_HISTORY = 20;
+
+export function loadPromptHistory(): string[] {
+  if (!existsSync(promptHistoryPath)) return [];
+  try {
+    const raw = JSON.parse(readFileSync(promptHistoryPath, "utf8")) as unknown;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export function savePromptHistory(history: string[]): void {
+  const trimmed = history.slice(-MAX_PROMPT_HISTORY);
+  mkdirSync(dirname(promptHistoryPath), { recursive: true });
+  writeFileSync(promptHistoryPath, `${JSON.stringify(trimmed, null, 2)}\n`, "utf8");
+}
+
 export function formatContextWindow(tokens: number): string {
   if (tokens >= 1000000) return `${Number((tokens / 1000000).toFixed(1))}M`;
   if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
