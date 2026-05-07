@@ -16,7 +16,7 @@ export interface AppCommandContext {
 
 export type CommandAction =
   | { type: "messages"; messages: string[] }
-  | { type: "set-model"; model: string; messages: string[] }
+  | { type: "show-model-selector"; search: string }
   | { type: "clear"; messages?: string[] }
   | { type: "quit" };
 
@@ -67,16 +67,9 @@ const commandList: SlashCommand[] = [
   },
   {
     name: "/model",
-    usage: "/model [name]",
-    description: "Show or set the configured model.",
-    handler: (args, context) => {
-      const model = args.join(" ").trim();
-      if (!model) return { type: "messages", messages: [`Current model: ${context.model}\nAvailable models:\n${context.availableModels.join("\n")}`] };
-      if (!context.availableModels.includes(model)) {
-        return { type: "messages", messages: [`Unknown model: ${model}\nAvailable models:\n${context.availableModels.join("\n")}`] };
-      }
-      return { type: "set-model", model, messages: [`Model set to ${model}`] };
-    },
+    usage: "/model [search]",
+    description: "Open the model selector.",
+    handler: (args) => ({ type: "show-model-selector", search: args.join(" ").trim() }),
   },
   {
     name: "/settings",

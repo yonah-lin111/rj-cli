@@ -3,7 +3,7 @@ import type { MarkdownTheme } from "@mariozechner/pi-tui";
 
 export const theme = {
   accent: chalk.hex("#7dd3fc"),
-  logo: chalk.hex("#2563eb").bold,
+  logo: chalk.hex("#60a5fa").bold,
   dim: chalk.dim,
   muted: chalk.hex("#64748b"),
   success: chalk.hex("#86efac"),
