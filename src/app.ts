@@ -282,7 +282,7 @@ export class RJApp {
 
   private chatHistory(): ChatHistoryMessage[] {
     return this.messages
-      .filter((message) => (message.kind === "user" || message.kind === "assistant") && message.text.trim())
+      .filter((message) => (message.kind === "user" || message.kind === "assistant") && message.text.trim() && !message.strikethrough)
       .map((message) => ({ role: message.kind as "user" | "assistant", content: message.text.trim() }));
   }
 
