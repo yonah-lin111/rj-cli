@@ -1,5 +1,6 @@
 import { CombinedAutocompleteProvider, Container, Editor, ProcessTerminal, Spacer, Text, TUI } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
+import { completeChat, type ChatHistoryMessage } from "./ai.js";
 import { formatContextWindow, getModel, getProvider, loadConfig, type RJConfig } from "./config.js";
 import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./commands.js";
 import { Footer } from "./components/footer.js";
@@ -47,7 +48,7 @@ function headerText(): string {
     `${theme.dim("!")} bash`,
     `${theme.dim("!!")} bash (no context)`,
   ].join(theme.muted(" · "));
-  return `${logo}\n${compact}\n${theme.dim("Press /help for commands. Ask a question to get a mock assistant reply.")}`;
+  return `${logo}\n${compact}\n${theme.dim("Press /help for commands. Ask a question to get an AI reply.")}`;
 }
 
 export class RJApp {
@@ -59,6 +60,7 @@ export class RJApp {
   private status = new Text("", 1, 0);
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
+  private runningAI = false;
   private runningBash = false;
   private stopped = false;
   private state: AppState = createInitialState(this.config);
@@ -129,10 +131,48 @@ export class RJApp {
       return;
     }
 
+    await this.handleChat(text);
+  }
+
+  private async handleChat(text: string): Promise<void> {
+    if (this.runningAI) {
+      this.addMessage("warning", "An AI request is already running. Wait for it to finish.", "warning");
+      this.requestRender();
+      return;
+    }
+
+    this.runningAI = true;
     this.addMessage("user", text, "user");
-    this.addMessage("assistant", `Mock reply: I received “${text}”. This basic RJ CLI does not call a real LLM yet.`, "assistant");
-    this.state.messageCount += 2;
+    this.state.messageCount++;
+
+    const provider = getProvider(this.config, this.state.provider);
+    const model = getModel(provider, this.state.model);
+    this.status.setText(theme.assistant(`Thinking with ${model.id}...`));
     this.requestRender();
+
+    try {
+      const reply = await completeChat({
+        provider,
+        model: model.id,
+        messages: this.chatHistory(),
+        maxTokens: model.outputLimit,
+      });
+      this.addMessage("assistant", reply, "assistant");
+      this.state.messageCount++;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.addMessage("error", message, "error");
+    } finally {
+      this.runningAI = false;
+      this.status.setText("");
+      this.requestRender();
+    }
+  }
+
+  private chatHistory(): ChatHistoryMessage[] {
+    return this.messages
+      .filter((message) => message.kind === "user" || message.kind === "assistant")
+      .map((message) => ({ role: message.kind as "user" | "assistant", content: message.text }));
   }
 
   private handleSlash(text: string): void {
