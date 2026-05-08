@@ -1,154 +1,23 @@
 import {
-  Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI,
-  getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
-  type Focusable, type SelectItem,
+  Container, Editor, Loader, ProcessTerminal, Spacer, Text, TUI,
+  matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
 } from "@mariozechner/pi-tui";
-import { runBash } from "./utils/bash.ts";
+import { runBash } from "./tools/bash.ts";
 import { streamChat, type ChatHistoryMessage } from "./core/ai.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
-  saveDefaultModel, savePromptHistory, type RJConfig, type RJModelConfig,
+  saveDefaultModel, savePromptHistory,
 } from "./core/config.ts";
+import { AppState, createInitialState } from "./core/state.ts";
 import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./core/commands.ts";
 import { Footer } from "./ui/footer.ts";
+import { headerText } from "./ui/header.ts";
+import { ModelSelector } from "./ui/model-selector.ts";
 import { MessagesView, type Message } from "./ui/messages.ts";
 import { editorTheme, theme } from "./ui/theme.ts";
-import { expandAtMentions } from "./utils/file-reader.ts";
+import { expandAtMentions } from "./tools/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
 
-/** 应用运行时状态 */
-export interface AppState {
-  cwd: string;
-  provider: string;
-  providerName: string;
-  model: string;
-  contextDisplay: string;
-  contextPercent: string;
-  contextTokens: number;
-  contextWindow: number;
-  outputLimit: number;
-  configPath: string;
-  availableModels: string[];
-  messageCount: number;
-  commandCount: number;
-  prompt?: string;
-  startedAt: Date;
-}
-
-/**
- * 根据配置创建初始应用状态。
- */
-const createInitialState = (config: RJConfig): AppState => {
-  const provider = getProvider(config, config.defaultProvider);
-  const model = getModel(provider, config.defaultModel);
-
-  return {
-    cwd: process.cwd(),
-    provider: provider.id,
-    providerName: provider.name,
-    model: model.id,
-    contextDisplay: formatContextWindow(model.contextWindow),
-    contextPercent: "0.0",
-    contextTokens: 0,
-    contextWindow: model.contextWindow,
-    outputLimit: model.outputLimit,
-    configPath: config.configPath,
-    availableModels: provider.models.map((item) => item.id),
-    messageCount: 0,
-    commandCount: 0,
-    startedAt: new Date(),
-  };
-};
-
-/**
- * 生成 ASCII logo 头部文本。
- */
-const headerText = (): string => {
-  const logo = [
-    "██████╗        ██╗",
-    "██╔══██╗       ██║",
-    "██████╔╝       ██║",
-    "██╔══██╗ ██╗   ██║",
-    "██║  ██║ ╚██████╔╝",
-    "╚═╝  ╚═╝  ╚═════╝ ",
-  ].join("\n");
-  return `${theme.logo(logo)} ${theme.dim("v0.1.0")}`;
-};
-
-/** 模型选择器组件 */
-class ModelSelector extends Container implements Focusable {
-  private search = new Input();
-  private list: SelectList;
-  private details = new Text();
-
-  focused = false;
-
-  constructor(
-    models: RJModelConfig[],
-    currentModelId: string,
-    onSelect: (modelId: string) => void,
-    onCancel: () => void,
-    initialSearch = "",
-  ) {
-    super();
-
-    const items = models.map((model) => ({
-      value: model.id,
-      label: model.name,
-      description: `${formatContextWindow(model.contextWindow)} context · ${model.outputLimit} output${model.id === currentModelId ? " · current" : ""}`,
-    }));
-    this.list = new SelectList(items, 10, editorTheme.selectList, { minPrimaryColumnWidth: 24, maxPrimaryColumnWidth: 36 });
-
-    this.search.setValue(initialSearch);
-    this.search.onSubmit = () => this.selectCurrent();
-    this.list.onSelect = (item) => onSelect(item.value);
-    this.list.onCancel = onCancel;
-    this.list.onSelectionChange = (item) => this.updateDetails(item);
-    this.list.setSelectedIndex(Math.max(0, items.findIndex((item) => item.value === currentModelId)));
-    this.list.setFilter(initialSearch);
-
-    this.addChild(new Text(theme.bold("Select model"), 1, 0));
-    this.addChild(new Text(theme.dim("Type to filter, ↑/↓ move, Enter select, Esc cancel"), 1, 0));
-    this.addChild(new Spacer(1));
-    this.addChild(this.search);
-    this.addChild(new Spacer(1));
-    this.addChild(this.list);
-    this.addChild(new Spacer(1));
-    this.addChild(this.details);
-    this.updateDetails(this.list.getSelectedItem());
-  }
-
-  handleInput(keyData: string): void {
-    const kb = getKeybindings();
-    if (
-      kb.matches(keyData, "tui.select.up") ||
-      kb.matches(keyData, "tui.select.down") ||
-      kb.matches(keyData, "tui.select.confirm") ||
-      kb.matches(keyData, "tui.select.cancel")
-    ) {
-      this.list.handleInput(keyData);
-      return;
-    }
-    this.search.handleInput(keyData);
-    this.list.setFilter(this.search.getValue());
-    this.updateDetails(this.list.getSelectedItem());
-  }
-
-  invalidate(): void {
-    super.invalidate();
-    this.search.invalidate();
-    this.list.invalidate();
-  }
-
-  private selectCurrent(): void {
-    const item = this.list.getSelectedItem();
-    if (item) this.list.onSelect?.(item);
-  }
-
-  private updateDetails(item: SelectItem | null): void {
-    this.details.setText(item ? theme.dim(`Model ID: ${item.value}`) : theme.dim("No matching models"));
-  }
-}
 
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
 export class RJApp {
