@@ -14,7 +14,7 @@ import { executeSlashCommand, getCommands, helpText, type AppCommandContext } fr
 import { Footer } from "./ui/footer.ts";
 import { headerText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
-import { MessagesView, type Message } from "./ui/messages.ts";
+import { MessagesView, type Message, type AssistantSegment, type ToolCallEntry } from "./ui/messages.ts";
 import { editorTheme, theme } from "./ui/theme.ts";
 import { expandAtMentions } from "./tools/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
@@ -180,11 +180,13 @@ export class RJApp {
 
     let assistant: Message | undefined;
     let assistantIndex = -1;
+    let currentSegment: AssistantSegment | undefined;
     const abortController = new AbortController();
     this.activeAIAbort = abortController;
     try {
       assistantIndex = this.messages.length;
       assistant = this.addMessage("assistant", "", "assistant");
+      assistant.segments = [];
       if (this.activeQA) this.activeQA.assistant = assistant;
       await streamChat({
         provider,
@@ -193,45 +195,58 @@ export class RJApp {
         maxTokens: model.outputLimit,
         tools: [writeFileSchema, editFileSchema, readFileToolSchema],
         signal: abortController.signal,
+        onTurn: () => {
+          currentSegment = { text: "" };
+          assistant!.segments!.push(currentSegment);
+          this.requestRender();
+        },
         onDelta: (delta) => {
-          if (!assistant) return;
-          if (delta.thinking) assistant.thinking = `${assistant.thinking ?? ""}${delta.thinking}`;
-          if (delta.content) assistant.text += delta.content;
+          if (!currentSegment) return;
+          if (delta.thinking) currentSegment.thinking = `${currentSegment.thinking ?? ""}${delta.thinking}`;
+          if (delta.content) currentSegment.text += delta.content;
           this.updateContextUsage();
           this.requestRender();
         },
         onToolCalls: async (calls: ToolCall[]): Promise<ToolResult[]> => {
           const results: ToolResult[] = [];
           for (const call of calls) {
+            const args = JSON.parse(call.arguments) as Record<string, unknown>;
+            const path = (args.path as string) ?? "";
+
+            let callLabel = call.name;
+            if (call.name === "read_file") callLabel = `Read ${path}`;
+            else if (call.name === "write_file") callLabel = `Write ${path}`;
+            else if (call.name === "edit_file") callLabel = `Edit ${path}`;
+
+            const entry: ToolCallEntry = { id: call.id, name: call.name, status: "running", callLabel };
+            if (currentSegment) {
+              currentSegment.toolCalls = [...(currentSegment.toolCalls ?? []), entry];
+              this.requestRender();
+            }
+
             let resultText: string;
             try {
-              const args = JSON.parse(call.arguments) as Record<string, unknown>;
               if (call.name === "read_file") {
-                const path = args.path as string;
                 const result = await readFileTool(path, this.state.cwd);
                 resultText = result.content;
-                this.addMessage("system", `Read ${result.path}`, "read");
+                entry.resultLabel = path;
               } else if (call.name === "write_file") {
-                const path = args.path as string;
-                const content = args.content as string;
-                const result = await writeFileTool(path, content, this.state.cwd);
-                resultText = result.created
-                  ? `Created ${result.path}`
-                  : `Overwrote ${result.path}`;
-                this.addMessage("system", resultText, result.created ? "created" : "wrote");
+                const result = await writeFileTool(path, args.content as string, this.state.cwd);
+                resultText = result.created ? `Created ${path}` : `Overwrote ${path}`;
+                entry.resultLabel = resultText;
               } else if (call.name === "edit_file") {
-                const path = args.path as string;
-                const edits = args.edits as FileEdit[];
-                const result = await editFileTool(path, edits, this.state.cwd);
-                resultText = `Edited ${result.path} (${result.applied} replacement${result.applied !== 1 ? "s" : ""})`;
-                this.addMessage("system", resultText, "edited");
+                const result = await editFileTool(path, args.edits as FileEdit[], this.state.cwd);
+                resultText = `Patched ${path}`;
+                entry.resultLabel = resultText;
               } else {
                 resultText = `Unknown tool: ${call.name}`;
-                this.addMessage("warning", resultText, "warning");
+                entry.resultLabel = resultText;
               }
+              entry.status = "completed";
             } catch (err) {
               resultText = err instanceof Error ? err.message : String(err);
-              this.addMessage("error", resultText, "error");
+              entry.resultLabel = resultText;
+              entry.status = "error";
             }
             results.push({ tool_call_id: call.id, content: resultText });
             this.requestRender();
@@ -243,7 +258,10 @@ export class RJApp {
       this.updateContextUsage();
     } catch (error) {
       if (abortController.signal.aborted) return;
-      if (assistant && !assistant.text.trim() && !assistant.thinking?.trim()) this.messages.splice(assistantIndex, 1);
+      const hasContent = assistant?.segments?.some(s => s.text.trim() || s.thinking?.trim());
+      if (assistant && !hasContent && assistantIndex >= 0) {
+        this.messages.splice(assistantIndex, 1);
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.addMessage("error", message, "error");
     } finally {

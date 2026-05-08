@@ -36,6 +36,8 @@ interface StreamChatOptions {
   maxTokens: number;
   tools: OpenAI.Chat.ChatCompletionTool[];
   signal?: AbortSignal;
+  /** 每轮 AI 请求开始前调用，用于在 UI 新增一个 segment */
+  onTurn: () => void;
   onDelta: (delta: ChatDelta) => void;
   onToolCalls: (calls: ToolCall[]) => Promise<ToolResult[]>;
 }
@@ -64,7 +66,7 @@ const readTextField = (record: Record<string, unknown>, keys: string[]): string 
  * 当 AI 返回 tool_calls 时，调用 onToolCalls 执行工具，将结果追加到历史后继续请求。
  */
 export const streamChat = async (options: StreamChatOptions): Promise<void> => {
-  const { provider, model, maxTokens, tools, signal, onDelta, onToolCalls } = options;
+  const { provider, model, maxTokens, tools, signal, onTurn, onDelta, onToolCalls } = options;
   if (!provider.baseURL) throw new Error(`Provider ${provider.name} is missing baseURL.`);
   if (!provider.apiKey) throw new Error(`Provider ${provider.name} is missing apiKey.`);
 
@@ -72,6 +74,7 @@ export const streamChat = async (options: StreamChatOptions): Promise<void> => {
   const history: ChatHistoryMessage[] = [...options.messages];
 
   for (;;) {
+    onTurn();
     const openaiMessages = history.map((m) => {
       if (m.role === "tool") {
         return {
