@@ -3,7 +3,8 @@ import {
   matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
 } from "@mariozechner/pi-tui";
 import { runBash } from "./tools/bash.ts";
-import { streamChat, type ChatHistoryMessage } from "./core/ai.ts";
+import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/file-writer.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema } from "./core/ai.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
   saveDefaultModel, savePromptHistory,
@@ -190,6 +191,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema],
         signal: abortController.signal,
         onDelta: (delta) => {
           if (!assistant) return;
@@ -197,6 +199,44 @@ export class RJApp {
           if (delta.content) assistant.text += delta.content;
           this.updateContextUsage();
           this.requestRender();
+        },
+        onToolCalls: async (calls: ToolCall[]): Promise<ToolResult[]> => {
+          const results: ToolResult[] = [];
+          for (const call of calls) {
+            let resultText: string;
+            try {
+              const args = JSON.parse(call.arguments) as Record<string, unknown>;
+              if (call.name === "read_file") {
+                const path = args.path as string;
+                const result = await readFileTool(path, this.state.cwd);
+                resultText = result.content;
+                this.addMessage("system", `Read ${result.path}`, "read");
+              } else if (call.name === "write_file") {
+                const path = args.path as string;
+                const content = args.content as string;
+                const result = await writeFileTool(path, content, this.state.cwd);
+                resultText = result.created
+                  ? `Created ${result.path}`
+                  : `Overwrote ${result.path}`;
+                this.addMessage("system", resultText, result.created ? "created" : "wrote");
+              } else if (call.name === "edit_file") {
+                const path = args.path as string;
+                const edits = args.edits as FileEdit[];
+                const result = await editFileTool(path, edits, this.state.cwd);
+                resultText = `Edited ${result.path} (${result.applied} replacement${result.applied !== 1 ? "s" : ""})`;
+                this.addMessage("system", resultText, "edited");
+              } else {
+                resultText = `Unknown tool: ${call.name}`;
+                this.addMessage("warning", resultText, "warning");
+              }
+            } catch (err) {
+              resultText = err instanceof Error ? err.message : String(err);
+              this.addMessage("error", resultText, "error");
+            }
+            results.push({ tool_call_id: call.id, content: resultText });
+            this.requestRender();
+          }
+          return results;
         },
       });
       this.state.messageCount++;

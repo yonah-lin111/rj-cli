@@ -3,18 +3,10 @@ import type { RJProviderConfig } from "./config.ts";
 
 /** AI 对话历史消息 */
 export interface ChatHistoryMessage {
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "tool";
   content: string;
-}
-
-/** 流式调用选项 */
-interface StreamChatOptions {
-  provider: RJProviderConfig;
-  model: string;
-  messages: ChatHistoryMessage[];
-  maxTokens: number;
-  signal?: AbortSignal;
-  onDelta: (delta: ChatDelta) => void;
+  tool_call_id?: string;
+  tool_calls?: ToolCall[];
 }
 
 /** 单次流式增量内容 */
@@ -23,23 +15,42 @@ export interface ChatDelta {
   thinking?: string;
 }
 
+/** tool call 请求（AI 发起） */
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/** tool 执行结果（由调用方提供） */
+export interface ToolResult {
+  tool_call_id: string;
+  content: string;
+}
+
+/** tool calling 流式调用选项 */
+interface StreamChatOptions {
+  provider: RJProviderConfig;
+  model: string;
+  messages: ChatHistoryMessage[];
+  maxTokens: number;
+  tools: OpenAI.Chat.ChatCompletionTool[];
+  signal?: AbortSignal;
+  onDelta: (delta: ChatDelta) => void;
+  onToolCalls: (calls: ToolCall[]) => Promise<ToolResult[]>;
+}
+
 /** 单次请求允许的最大输出 token 数 */
 const maxAllowedOutputTokens = 32768;
 
 /** 各提供商思考内容字段名（兼容多种 API） */
 const thinkingDeltaKeys = ["reasoning_content", "reasoning", "reasoning_text", "thinking"];
 
-/**
- * 将 maxTokens 限制在合法范围内。
- */
 const clampMaxTokens = (value: number): number => {
   if (!Number.isFinite(value)) return maxAllowedOutputTokens;
   return Math.min(maxAllowedOutputTokens, Math.max(1, Math.floor(value)));
 };
 
-/**
- * 从 Record 中按候选 key 列表读取第一个非空字符串值。
- */
 const readTextField = (record: Record<string, unknown>, keys: string[]): string | undefined => {
   for (const key of keys) {
     const value = record[key];
@@ -49,38 +60,197 @@ const readTextField = (record: Record<string, unknown>, keys: string[]): string 
 };
 
 /**
- * 以流式方式调用 AI 模型，通过 onDelta 回调逐步返回内容和思考过程。
- * 响应为空时抛出错误。
+ * 以流式方式调用 AI，支持 tool calling 循环。
+ * 当 AI 返回 tool_calls 时，调用 onToolCalls 执行工具，将结果追加到历史后继续请求。
  */
 export const streamChat = async (options: StreamChatOptions): Promise<void> => {
-  const { provider, model, messages, maxTokens, signal, onDelta } = options;
+  const { provider, model, maxTokens, tools, signal, onDelta, onToolCalls } = options;
   if (!provider.baseURL) throw new Error(`Provider ${provider.name} is missing baseURL.`);
   if (!provider.apiKey) throw new Error(`Provider ${provider.name} is missing apiKey.`);
 
   const client = new OpenAI({ baseURL: provider.baseURL, apiKey: provider.apiKey });
-  const stream = await client.chat.completions.create(
-    {
-      model,
-      messages,
-      max_tokens: clampMaxTokens(maxTokens),
-      stream: true,
-    },
-    { signal },
-  );
+  const history: ChatHistoryMessage[] = [...options.messages];
 
-  let hasOutput = false;
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta;
-    if (!delta) continue;
+  for (;;) {
+    const openaiMessages = history.map((m) => {
+      if (m.role === "tool") {
+        return {
+          role: "tool" as const,
+          tool_call_id: m.tool_call_id!,
+          content: m.content,
+        };
+      }
+      if (m.tool_calls) {
+        return {
+          role: "assistant" as const,
+          content: m.content || null,
+          tool_calls: m.tool_calls.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        };
+      }
+      return { role: m.role as "user" | "assistant" | "system", content: m.content };
+    });
 
-    const deltaRecord = delta as Record<string, unknown>;
-    const content = typeof delta.content === "string" ? delta.content : undefined;
-    const thinking = readTextField(deltaRecord, thinkingDeltaKeys);
-    if (!content && !thinking) continue;
+    const stream = await client.chat.completions.create(
+      {
+        model,
+        messages: openaiMessages,
+        max_tokens: clampMaxTokens(maxTokens),
+        tools: tools.length > 0 ? tools : undefined,
+        stream: true,
+      },
+      { signal },
+    );
 
-    hasOutput = true;
-    onDelta({ content, thinking });
+    let hasOutput = false;
+    let assistantContent = "";
+    const pendingToolCalls: Record<number, { id: string; name: string; arguments: string }> = {};
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (!delta) continue;
+
+      const deltaRecord = delta as Record<string, unknown>;
+      const content = typeof delta.content === "string" ? delta.content : undefined;
+      const thinking = readTextField(deltaRecord, thinkingDeltaKeys);
+
+      if (content) {
+        assistantContent += content;
+        hasOutput = true;
+        onDelta({ content });
+      }
+      if (thinking) {
+        hasOutput = true;
+        onDelta({ thinking });
+      }
+
+      // 累积 tool_calls 增量
+      const toolCallDeltas = delta.tool_calls;
+      if (toolCallDeltas) {
+        for (const tc of toolCallDeltas) {
+          const idx = tc.index ?? 0;
+          if (!pendingToolCalls[idx]) {
+            pendingToolCalls[idx] = { id: tc.id ?? "", name: tc.function?.name ?? "", arguments: "" };
+          }
+          if (tc.id) pendingToolCalls[idx].id = tc.id;
+          if (tc.function?.name && !pendingToolCalls[idx].name) pendingToolCalls[idx].name = tc.function.name;
+          if (tc.function?.arguments) pendingToolCalls[idx].arguments += tc.function.arguments;
+        }
+        hasOutput = true;
+      }
+    }
+
+    const toolCallList = Object.values(pendingToolCalls);
+
+    if (toolCallList.length === 0) {
+      if (!hasOutput) throw new Error("AI response was empty.");
+      break;
+    }
+
+    // 将 assistant 的 tool_calls 消息追加到历史
+    history.push({
+      role: "assistant",
+      content: assistantContent,
+      tool_calls: toolCallList,
+    });
+
+    // 执行 tools，获取结果
+    const results = await onToolCalls(toolCallList);
+    for (const result of results) {
+      history.push({
+        role: "tool",
+        tool_call_id: result.tool_call_id,
+        content: result.content,
+      });
+    }
   }
+};
 
-  if (!hasOutput) throw new Error("AI response was empty.");
+/** write_file tool 的 OpenAI schema */
+export const writeFileTool: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "write_file",
+    description:
+      "Create a new file or overwrite an existing file with the given content. Parent directories are created automatically.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "File path relative to the working directory (or absolute).",
+        },
+        content: {
+          type: "string",
+          description: "Full content to write to the file.",
+        },
+      },
+      required: ["path", "content"],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** edit_file tool 的 OpenAI schema */
+export const editFileTool: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "edit_file",
+    description:
+      "Apply one or more exact string replacements to an existing file. Each oldText must appear exactly once in the file.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "File path relative to the working directory (or absolute).",
+        },
+        edits: {
+          type: "array",
+          description: "List of replacements to apply.",
+          items: {
+            type: "object",
+            properties: {
+              oldText: {
+                type: "string",
+                description: "Exact text to find (must be unique in the file).",
+              },
+              newText: {
+                type: "string",
+                description: "Text to replace it with.",
+              },
+            },
+            required: ["oldText", "newText"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["path", "edits"],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** read_file tool 的 OpenAI schema */
+export const readFileToolSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "read_file",
+    description:
+      "Read the contents of a file. Use this before editing to understand the current content.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "File path relative to the working directory (or absolute).",
+        },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    },
+  },
 };
