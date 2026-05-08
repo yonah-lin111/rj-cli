@@ -17,6 +17,7 @@ import { MessagesView, type Message } from "./ui/messages.ts";
 import { editorTheme, theme } from "./ui/theme.ts";
 import { expandAtMentions } from "./tools/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
+import { buildSystemPrompt } from "./prompts/system.ts";
 
 
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
@@ -131,7 +132,7 @@ export class RJApp {
     if (!text) return;
     this.editor.addToHistory(text);
 
-    if (text.startsWith("/")) {
+    if (text.startsWith("/") && /^\/[^\s/]+(\s|$)/.test(text)) {
       this.handleSlash(text);
       return;
     }
@@ -215,10 +216,12 @@ export class RJApp {
   }
 
   /**
-   * 构建发送给 AI 的对话历史，过滤掉非对话消息和已取消的消息。
+   * 构建发送给 AI 的对话历史，开头注入系统提示词，过滤掉非对话消息和已取消的消息。
    */
   private chatHistory(): ChatHistoryMessage[] {
-    return this.messages
+    const systemPrompt = buildSystemPrompt(this.state.cwd);
+
+    const history = this.messages
       .filter((message) =>
         (message.kind === "user" || message.kind === "assistant") &&
         message.text.trim() &&
@@ -228,6 +231,8 @@ export class RJApp {
         role: message.kind as "user" | "assistant",
         content: (message.expandedText ?? message.text).trim(),
       }));
+
+    return [systemPrompt, ...history];
   }
 
   private updateContextUsage(): void {

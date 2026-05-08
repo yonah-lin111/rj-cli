@@ -3,7 +3,7 @@ import type { RJProviderConfig } from "./config.ts";
 
 /** AI 对话历史消息 */
 export interface ChatHistoryMessage {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
 }
 
