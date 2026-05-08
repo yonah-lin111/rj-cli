@@ -1,4 +1,4 @@
-import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, type Focusable, type OverlayHandle, type SelectItem } from "@mariozechner/pi-tui";
+import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, type Focusable, type SelectItem } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
 import { streamChat, type ChatHistoryMessage } from "./ai.js";
 import { formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory, saveDefaultModel, savePromptHistory, type RJConfig, type RJModelConfig } from "./config.js";
@@ -131,7 +131,7 @@ export class RJApp {
   private chat = new Container();
   private status = new Container();
   private loadingAnimation?: Loader;
-  private modelSelector?: OverlayHandle;
+  private modelSelector?: ModelSelector;
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
   private runningAI = false;
@@ -443,26 +443,30 @@ export class RJApp {
   }
 
   private showModelSelector(initialSearch = ""): void {
-    this.modelSelector?.hide();
     const provider = getProvider(this.config, this.state.provider);
     const selector = new ModelSelector(
       provider.models,
       this.state.model,
       (modelId) => {
-        this.modelSelector?.hide();
-        this.modelSelector = undefined;
+        this.closeModelSelector();
         this.setModel(modelId);
         this.showPrompt(`Model set to ${getModel(provider, modelId).name}`);
         this.requestRender();
       },
       () => {
-        this.modelSelector?.hide();
-        this.modelSelector = undefined;
+        this.closeModelSelector();
         this.requestRender();
       },
       initialSearch,
     );
-    this.modelSelector = this.tui.showOverlay(selector, { width: "100%", maxHeight: "80%", anchor: "center", margin: 0 });
+    this.modelSelector = selector;
+    this.refreshChat();
+    this.tui.setFocus(selector);
+  }
+
+  private closeModelSelector(): void {
+    this.modelSelector = undefined;
+    this.tui.setFocus(this.editor);
   }
 
   private setModel(modelId: string): void {
@@ -487,6 +491,10 @@ export class RJApp {
   private refreshChat(): void {
     this.chat.clear();
     this.chat.addChild(new MessagesView(() => this.messages));
+    if (this.modelSelector) {
+      this.chat.addChild(new Spacer(1));
+      this.chat.addChild(this.modelSelector);
+    }
   }
 
   private requestRender(): void {
