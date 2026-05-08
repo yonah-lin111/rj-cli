@@ -33,6 +33,8 @@ export interface ToolCallEntry {
   resultText?: string;
   /** 工具结果是否为错误 */
   isError?: boolean;
+  /** 工具结果的自定义展示内容 */
+  displayText?: string;
   /** 当前 spinner 帧索引（running 时使用） */
   spinnerFrame?: number;
 }
@@ -98,6 +100,10 @@ const renderMarkdown = (
 
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
+  if (entry.name === "todowrite" && entry.status === "completed" && entry.displayText) {
+    return renderMarkdown(entry.displayText, 80, {});
+  }
+
   let indicator: string;
   if (entry.name === "bash") {
     indicator = theme.success("*");

@@ -4,7 +4,8 @@ import {
 } from "@mariozechner/pi-tui";
 import { runBash, runBashTool } from "./tools/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/file-writer.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema } from "./core/ai.ts";
+import { todoWriteTool } from "./tools/todo.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema } from "./core/ai.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
   saveDefaultModel, savePromptHistory,
@@ -199,7 +200,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -247,6 +248,7 @@ export class RJApp {
             else if (call.name === "write_file") callLabel = `Write ${path}`;
             else if (call.name === "edit_file") callLabel = `Edit ${path}`;
             else if (call.name === "bash") callLabel = `Bash ${command}`;
+            else if (call.name === "todowrite") callLabel = "Update todos";
 
             entry = { id: call.id, name: call.name, status: "running", callLabel, spinnerFrame: 0 };
             if (currentSegment) {
@@ -283,6 +285,11 @@ export class RJApp {
                 resultText = result.content;
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "todowrite") {
+                const result = todoWriteTool(args.todos);
+                resultText = result.content;
+                entry.displayText = result.displayText;
                 entry.resultText = resultText;
               } else {
                 resultText = `Unknown tool: ${call.name}`;

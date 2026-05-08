@@ -313,6 +313,48 @@ export const readFileToolSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+/** todowrite tool 的 OpenAI schema */
+export const todoWriteToolSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "todowrite",
+    description:
+      "Create and manage a structured todo list for the current coding session. Use for multi-step work to track progress.",
+    parameters: {
+      type: "object",
+      properties: {
+        todos: {
+          type: "array",
+          description: "The updated todo list.",
+          items: {
+            type: "object",
+            properties: {
+              content: {
+                type: "string",
+                description: "Brief description of the task.",
+              },
+              status: {
+                type: "string",
+                enum: ["pending", "in_progress", "completed", "cancelled"],
+                description: "Current status of the task.",
+              },
+              priority: {
+                type: "string",
+                enum: ["high", "medium", "low"],
+                description: "Priority level of the task.",
+              },
+            },
+            required: ["content", "status", "priority"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["todos"],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** bash tool 的 OpenAI schema */
 export const bashToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",
