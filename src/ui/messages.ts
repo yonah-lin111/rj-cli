@@ -87,30 +87,19 @@ const renderMarkdown = (
 ): string[] =>
   new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
 
-/** 渲染单条 tool call 的调用行和结果行 */
+/** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
-  const lines: string[] = [];
   const arrow = entry.status === "running" ? theme.accent("→") : theme.muted("→");
-  lines.push(`${arrow} ${theme.dim(entry.callLabel)}`);
-  if (entry.status === "completed" && entry.resultLabel) {
-    lines.push(`${theme.success("←")} ${theme.dim(entry.resultLabel)}`);
-  } else if (entry.status === "error" && entry.resultLabel) {
-    lines.push(`${theme.error("←")} ${theme.error(entry.resultLabel)}`);
-  }
-  return lines;
+  const suffix = entry.status === "error" ? ` ${theme.error("failed")}` : "";
+  return [`${arrow} ${theme.dim(entry.callLabel)}${suffix}`];
 };
 
 /** 渲染 assistant 消息的一个段落 */
 const renderSegment = (seg: AssistantSegment, contentWidth: number): string[] => {
   const lines: string[] = [];
   if (seg.thinking?.trim()) {
-    lines.push(theme.thinkingLabel("thinking"));
-    lines.push(
-      ...renderMarkdown(seg.thinking.trimEnd(), contentWidth, {
-        color: theme.thinkingText,
-        italic: true,
-      }),
-    );
+    const thinkingText = seg.thinking.trim().replace(/\n/g, " ");
+    lines.push(`${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`);
     if (seg.text.trim() || seg.toolCalls?.length) lines.push("");
   }
   if (seg.text.trim()) {
@@ -163,13 +152,8 @@ export const formatMessage = (message: Message, width = 80): string[] => {
   } else {
     // 兼容无 segments 的旧格式
     if (message.thinking?.trim()) {
-      lines.push(theme.thinkingLabel("thinking"));
-      lines.push(
-        ...renderMarkdown(message.thinking.trimEnd(), contentWidth, {
-          color: theme.thinkingText,
-          italic: true,
-        }),
-      );
+      const thinkingText = message.thinking.trim().replace(/\n/g, " ");
+      lines.push(`${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`);
       if (message.text.trim()) lines.push("");
     }
     if (message.text.trim())

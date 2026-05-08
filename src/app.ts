@@ -280,15 +280,25 @@ export class RJApp {
     const systemPrompt = buildSystemPrompt(this.state.cwd);
 
     const history = this.messages
-      .filter((message) =>
-        (message.kind === "user" || message.kind === "assistant") &&
-        message.text.trim() &&
-        !message.strikethrough,
-      )
-      .map((message) => ({
-        role: message.kind as "user" | "assistant",
-        content: (message.expandedText ?? message.text).trim(),
-      }));
+      .filter((message) => {
+        if (message.strikethrough) return false;
+        if (message.kind === "user") return message.text.trim().length > 0;
+        if (message.kind === "assistant") {
+          if (message.segments?.length) return message.segments.some(s => s.text.trim());
+          return message.text.trim().length > 0;
+        }
+        return false;
+      })
+      .map((message) => {
+        if (message.kind === "assistant" && message.segments?.length) {
+          const content = message.segments.map(s => s.text.trim()).filter(Boolean).join("\n\n");
+          return { role: "assistant" as const, content };
+        }
+        return {
+          role: message.kind as "user" | "assistant",
+          content: (message.expandedText ?? message.text).trim(),
+        };
+      });
 
     return [systemPrompt, ...history];
   }
