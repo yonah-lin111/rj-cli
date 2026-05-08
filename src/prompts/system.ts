@@ -16,6 +16,8 @@ export function buildSystemPrompt(cwd: string): ChatHistoryMessage {
       `  Each edit has oldText (must be unique in the file) and newText.`,
       ``,
       `Use these tools when the user asks you to create, write, or modify files.`,
+      `Tool results are automatically added to the next model context; do not repeat raw tool output unless the user needs it.`,
+      `Do not call a tool again when a previous tool result already satisfies the current need.`,
       `Always read_file before edit_file to understand the current content.`,
       `Prefer edit_file over write_file when modifying existing files to avoid overwriting unrelated content.`,
     ].join("\n"),

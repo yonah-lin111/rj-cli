@@ -29,6 +29,10 @@ export interface ToolCallEntry {
   callLabel: string;
   /** 结果行，如 "Patched Desktop/hello.txt" */
   resultLabel?: string;
+  /** 工具返回内容摘要来源 */
+  resultText?: string;
+  /** 工具结果是否为错误 */
+  isError?: boolean;
   /** 当前 spinner 帧索引（running 时使用） */
   spinnerFrame?: number;
 }
@@ -91,6 +95,12 @@ const renderMarkdown = (
 ): string[] =>
   new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
 
+const toolResultSummary = (entry: ToolCallEntry): string | undefined => {
+  const value = (entry.resultLabel ?? entry.resultText)?.trim();
+  if (!value) return undefined;
+  return value.replace(/\s+/g, " ").slice(0, 160);
+};
+
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
   let indicator: string;
@@ -105,7 +115,13 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
   const label = entry.status === "error"
     ? theme.error(entry.callLabel)
     : theme.dim(entry.callLabel);
-  return [`${indicator} ${label}`];
+  const lines = [`${indicator} ${label}`];
+  const summary = toolResultSummary(entry);
+  if (summary && entry.status !== "running") {
+    const color = entry.isError || entry.status === "error" ? theme.error : theme.dim;
+    lines.push(`  ${color(summary)}`);
+  }
+  return lines;
 };
 
 /** 渲染 assistant 消息的一个段落 */

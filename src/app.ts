@@ -34,6 +34,7 @@ export class RJApp {
   private modelSelector?: ModelSelector;
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
+  private sessionMessages: ChatHistoryMessage[] = [];
   private runningAI = false;
   private runningBash = false;
   private activeAIAbort?: AbortController;
@@ -181,6 +182,9 @@ export class RJApp {
     let assistant: Message | undefined;
     let assistantIndex = -1;
     let currentSegment: AssistantSegment | undefined;
+    const sessionStartIndex = this.sessionMessages.length;
+    const userHistoryMessage: ChatHistoryMessage = { role: "user", content: expanded };
+    this.sessionMessages.push(userHistoryMessage);
     const abortController = new AbortController();
     this.activeAIAbort = abortController;
     try {
@@ -210,61 +214,95 @@ export class RJApp {
         onToolCalls: async (calls: ToolCall[]): Promise<ToolResult[]> => {
           const results: ToolResult[] = [];
           for (const call of calls) {
-            const args = JSON.parse(call.arguments) as Record<string, unknown>;
-            const path = (args.path as string) ?? "";
-
+            let args: Record<string, unknown>;
+            let path = "";
             let callLabel = call.name;
+            let entry: ToolCallEntry | undefined;
+
+            const setToolEntry = (status: ToolCallEntry["status"], resultText: string, isError = false): void => {
+              if (!entry) return;
+              entry.status = status;
+              entry.resultLabel = resultText;
+              entry.resultText = resultText;
+              entry.isError = isError;
+            };
+
+            try {
+              args = JSON.parse(call.arguments) as Record<string, unknown>;
+              path = (args.path as string) ?? "";
+            } catch (err) {
+              const resultText = err instanceof Error ? err.message : String(err);
+              entry = { id: call.id, name: call.name, status: "error", callLabel, resultLabel: resultText, resultText, isError: true };
+              if (currentSegment) currentSegment.toolCalls = [...(currentSegment.toolCalls ?? []), entry];
+              results.push({ tool_call_id: call.id, toolName: call.name, content: resultText, isError: true });
+              this.requestRender();
+              continue;
+            }
+
             if (call.name === "read_file") callLabel = `Read ${path}`;
             else if (call.name === "write_file") callLabel = `Write ${path}`;
             else if (call.name === "edit_file") callLabel = `Edit ${path}`;
 
-            const entry: ToolCallEntry = { id: call.id, name: call.name, status: "running", callLabel, spinnerFrame: 0 };
+            entry = { id: call.id, name: call.name, status: "running", callLabel, spinnerFrame: 0 };
             if (currentSegment) {
               currentSegment.toolCalls = [...(currentSegment.toolCalls ?? []), entry];
               this.requestRender();
             }
 
             const spinnerTimer = setInterval(() => {
+              if (!entry) return;
               entry.spinnerFrame = ((entry.spinnerFrame ?? 0) + 1) % 10;
               this.requestRender();
             }, 80);
 
             let resultText: string;
+            let isError = false;
             try {
               if (call.name === "read_file") {
                 const result = await readFileTool(path, this.state.cwd);
                 resultText = result.content;
                 entry.resultLabel = path;
+                entry.resultText = resultText;
               } else if (call.name === "write_file") {
                 const result = await writeFileTool(path, args.content as string, this.state.cwd);
                 resultText = result.created ? `Created ${path}` : `Overwrote ${path}`;
                 entry.resultLabel = resultText;
+                entry.resultText = resultText;
               } else if (call.name === "edit_file") {
-                const result = await editFileTool(path, args.edits as FileEdit[], this.state.cwd);
+                await editFileTool(path, args.edits as FileEdit[], this.state.cwd);
                 resultText = `Patched ${path}`;
                 entry.resultLabel = resultText;
+                entry.resultText = resultText;
               } else {
                 resultText = `Unknown tool: ${call.name}`;
-                entry.resultLabel = resultText;
+                isError = true;
+                setToolEntry("error", resultText, true);
               }
-              entry.status = "completed";
+              if (!isError) entry.status = "completed";
             } catch (err) {
               resultText = err instanceof Error ? err.message : String(err);
-              entry.resultLabel = resultText;
-              entry.status = "error";
+              isError = true;
+              setToolEntry("error", resultText, true);
             } finally {
               clearInterval(spinnerTimer);
             }
-            results.push({ tool_call_id: call.id, content: resultText });
+            results.push({ tool_call_id: call.id, toolName: call.name, content: resultText, isError });
             this.requestRender();
           }
           return results;
+        },
+        onHistoryMessage: (message) => {
+          this.sessionMessages.push(message);
+          this.updateContextUsage();
         },
       });
       this.state.messageCount++;
       this.updateContextUsage();
     } catch (error) {
-      if (abortController.signal.aborted) return;
+      if (abortController.signal.aborted) {
+        this.sessionMessages.splice(sessionStartIndex);
+        return;
+      }
       const hasContent = assistant?.segments?.some(s => s.text.trim() || s.thinking?.trim());
       if (assistant && !hasContent && assistantIndex >= 0) {
         this.messages.splice(assistantIndex, 1);
@@ -281,33 +319,25 @@ export class RJApp {
   }
 
   /**
-   * 构建发送给 AI 的对话历史，开头注入系统提示词，过滤掉非对话消息和已取消的消息。
+   * 构建发送给 AI 的对话历史，开头注入系统提示词。
    */
   private chatHistory(): ChatHistoryMessage[] {
-    const systemPrompt = buildSystemPrompt(this.state.cwd);
+    return [buildSystemPrompt(this.state.cwd), ...this.sessionMessages];
+  }
 
-    const history = this.messages
-      .filter((message) => {
-        if (message.strikethrough) return false;
-        if (message.kind === "user") return message.text.trim().length > 0;
-        if (message.kind === "assistant") {
-          if (message.segments?.length) return message.segments.some(s => s.text.trim());
-          return message.text.trim().length > 0;
-        }
-        return false;
-      })
-      .map((message) => {
-        if (message.kind === "assistant" && message.segments?.length) {
-          const content = message.segments.map(s => s.text.trim()).filter(Boolean).join("\n\n");
-          return { role: "assistant" as const, content };
-        }
-        return {
-          role: message.kind as "user" | "assistant",
-          content: (message.expandedText ?? message.text).trim(),
-        };
-      });
-
-    return [systemPrompt, ...history];
+  private estimateMessageTokens(message: ChatHistoryMessage): number {
+    let text = message.role === "assistant" && message.blocks?.length ? "" : (message.content ?? "");
+    if (message.role === "assistant") {
+      for (const block of message.blocks ?? []) {
+        if (block.type === "thinking") text += block.thinking;
+        else if (block.type === "toolCall") text += block.toolCall.name + block.toolCall.arguments;
+      }
+      if (!message.blocks?.length) {
+        for (const call of message.tool_calls ?? []) text += call.name + call.arguments;
+      }
+    }
+    if (message.role === "tool") text += message.tool_call_id + (message.toolName ?? "");
+    return Math.ceil(text.length / 4) + 4;
   }
 
   private updateContextUsage(): void {
@@ -321,7 +351,7 @@ export class RJApp {
    * 按字符数粗略估算 token 用量（4 字符 ≈ 1 token）。
    */
   private estimateContextTokens(): number {
-    return this.chatHistory().reduce((total, message) => total + Math.ceil(message.content.length / 4) + 4, 0);
+    return this.chatHistory().reduce((total, message) => total + this.estimateMessageTokens(message), 0);
   }
 
   private contextUsageDisplay(): string {
@@ -362,6 +392,7 @@ export class RJApp {
 
     if (action.type === "clear") {
       this.messages = [];
+      this.sessionMessages = [];
       this.state.messageCount = 0;
       this.state.commandCount = 0;
       this.updateContextUsage();
