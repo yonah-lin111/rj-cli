@@ -98,30 +98,40 @@ const renderMarkdown = (
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
   let indicator: string;
-  if (entry.status === "running") {
-    const frame = SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length];
+  if (entry.name === "bash") {
+    indicator = theme.success("*");
+  } else if (entry.status === "running") {
+    const frame =
+      SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length];
     indicator = theme.accent(frame!);
   } else if (entry.status === "completed") {
     indicator = theme.success("✓");
   } else {
     indicator = theme.error("✗");
   }
-  const label = entry.status === "error"
-    ? theme.error(entry.callLabel)
-    : theme.dim(entry.callLabel);
-  const resultLabel = entry.status !== "running" && entry.resultLabel
-    ? ` ${theme.dim("—")} ${entry.status === "error" ? theme.error(entry.resultLabel) : theme.dim(entry.resultLabel)}`
-    : "";
+  const label =
+    entry.status === "error"
+      ? theme.error(entry.callLabel)
+      : theme.dim(entry.callLabel);
+  const resultLabel =
+    entry.status !== "running" && entry.resultLabel
+      ? ` ${theme.dim("—")} ${entry.status === "error" ? theme.error(entry.resultLabel) : theme.dim(entry.resultLabel)}`
+      : "";
   const lines = [`${indicator} ${label}${resultLabel}`];
   return lines;
 };
 
 /** 渲染 assistant 消息的一个段落 */
-const renderSegment = (seg: AssistantSegment, contentWidth: number): string[] => {
+const renderSegment = (
+  seg: AssistantSegment,
+  contentWidth: number,
+): string[] => {
   const lines: string[] = [];
   if (seg.thinking?.trim()) {
     const thinkingText = seg.thinking.trim().replace(/\n/g, " ");
-    lines.push(`${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`);
+    lines.push(
+      `${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`,
+    );
     if (seg.text.trim() || seg.toolCalls?.length) lines.push("");
   }
   if (seg.text.trim()) {
@@ -175,7 +185,9 @@ export const formatMessage = (message: Message, width = 80): string[] => {
     // 兼容无 segments 的旧格式
     if (message.thinking?.trim()) {
       const thinkingText = message.thinking.trim().replace(/\n/g, " ");
-      lines.push(`${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`);
+      lines.push(
+        `${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`,
+      );
       if (message.text.trim()) lines.push("");
     }
     if (message.text.trim())
