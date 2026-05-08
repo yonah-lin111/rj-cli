@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import type { MarkdownTheme } from "@mariozechner/pi-tui";
 
+/** 主 UI 颜色与样式主题 */
 export const theme = {
   accent: chalk.hex("#7dd3fc"),
   logo: chalk.hex("#60a5fa").bold,
@@ -20,6 +21,7 @@ export const theme = {
   bold: chalk.bold,
 };
 
+/** Markdown 渲染主题 */
 export const markdownTheme: MarkdownTheme = {
   heading: chalk.bold.cyan,
   link: chalk.blue,
@@ -37,6 +39,7 @@ export const markdownTheme: MarkdownTheme = {
   underline: chalk.underline,
 };
 
+/** 编辑器组件主题 */
 export const editorTheme = {
   borderColor: theme.muted,
   selectList: {

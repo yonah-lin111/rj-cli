@@ -2,12 +2,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+/** 文件读取相关配置 */
 export interface RJFileReadingConfig {
   maxFileSizeBytes: number;
   maxDirectoryEntries: number;
   allowedExtensions: string[];
 }
 
+/** 单个模型配置 */
 export interface RJModelConfig {
   id: string;
   name: string;
@@ -15,6 +17,7 @@ export interface RJModelConfig {
   outputLimit: number;
 }
 
+/** AI 提供商配置 */
 export interface RJProviderConfig {
   id: string;
   name: string;
@@ -24,6 +27,7 @@ export interface RJProviderConfig {
   models: RJModelConfig[];
 }
 
+/** 应用全局配置 */
 export interface RJConfig {
   defaultProvider: string;
   defaultModel: string;
@@ -32,6 +36,7 @@ export interface RJConfig {
   configPath: string;
 }
 
+/** 原始配置文件结构（字段类型未验证） */
 interface RawRJConfig {
   defaultProvider?: unknown;
   defaultModel?: unknown;
@@ -39,14 +44,17 @@ interface RawRJConfig {
   providers?: unknown;
 }
 
+/** 配置文件路径 */
 const configPath = join(homedir(), ".RJ", "config.json");
 
+/** 文件读取默认配置 */
 const DEFAULT_FILE_READING: RJFileReadingConfig = {
   maxFileSizeBytes: 1048576,
   maxDirectoryEntries: 200,
   allowedExtensions: [],
 };
 
+/** 配置文件缺失或解析失败时的兜底配置 */
 const fallbackConfig: RJConfig = {
   defaultProvider: "mock",
   defaultModel: "mock-sonnet",
@@ -61,21 +69,32 @@ const fallbackConfig: RJConfig = {
   configPath,
 };
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
+/**
+ * 将 unknown 值转为 Record，非对象或数组返回 null。
+ */
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
-function readString(record: Record<string, unknown>, key: string): string | undefined {
+/**
+ * 从 Record 中读取非空字符串字段，不满足则返回 undefined。
+ */
+const readString = (record: Record<string, unknown>, key: string): string | undefined => {
   const value = record[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
+};
 
-function readNumber(record: Record<string, unknown>, key: string): number | undefined {
+/**
+ * 从 Record 中读取有限数字字段，不满足则返回 undefined。
+ */
+const readNumber = (record: Record<string, unknown>, key: string): number | undefined => {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
+};
 
-function parseModel(value: unknown): RJModelConfig | null {
+/**
+ * 解析单个模型配置，字段不合法返回 null。
+ */
+const parseModel = (value: unknown): RJModelConfig | null => {
   const record = asRecord(value);
   if (!record) return null;
   const id = readString(record, "id");
@@ -87,9 +106,12 @@ function parseModel(value: unknown): RJModelConfig | null {
     contextWindow: readNumber(record, "contextWindow") ?? 200000,
     outputLimit: readNumber(record, "outputLimit") ?? 64000,
   };
-}
+};
 
-function parseProvider(value: unknown): RJProviderConfig | null {
+/**
+ * 解析单个提供商配置，字段不合法或无有效模型返回 null。
+ */
+const parseProvider = (value: unknown): RJProviderConfig | null => {
   const record = asRecord(value);
   if (!record) return null;
   const id = readString(record, "id");
@@ -105,9 +127,12 @@ function parseProvider(value: unknown): RJProviderConfig | null {
     apiKey: readString(record, "apiKey"),
     models,
   };
-}
+};
 
-export function loadConfig(): RJConfig {
+/**
+ * 从 ~/.RJ/config.json 加载配置，文件不存在或解析失败时返回兜底配置。
+ */
+export const loadConfig = (): RJConfig => {
   if (!existsSync(configPath)) return fallbackConfig;
 
   try {
@@ -144,17 +169,24 @@ export function loadConfig(): RJConfig {
   } catch {
     return fallbackConfig;
   }
-}
+};
 
-export function getProvider(config: RJConfig, providerId: string): RJProviderConfig {
-  return config.providers.find((provider) => provider.id === providerId) ?? config.providers[0]!;
-}
+/**
+ * 按 id 查找提供商，找不到则返回第一个。
+ */
+export const getProvider = (config: RJConfig, providerId: string): RJProviderConfig =>
+  config.providers.find((provider) => provider.id === providerId) ?? config.providers[0]!;
 
-export function getModel(provider: RJProviderConfig, modelId: string): RJModelConfig {
-  return provider.models.find((model) => model.id === modelId) ?? provider.models[0]!;
-}
+/**
+ * 按 id 查找模型，找不到则返回第一个。
+ */
+export const getModel = (provider: RJProviderConfig, modelId: string): RJModelConfig =>
+  provider.models.find((model) => model.id === modelId) ?? provider.models[0]!;
 
-export function saveDefaultModel(config: RJConfig, providerId: string, modelId: string): RJConfig {
+/**
+ * 将指定提供商和模型设为默认，并持久化到配置文件。
+ */
+export const saveDefaultModel = (config: RJConfig, providerId: string, modelId: string): RJConfig => {
   const provider = getProvider(config, providerId);
   const model = getModel(provider, modelId);
   const updated: RJConfig = {
@@ -170,12 +202,18 @@ export function saveDefaultModel(config: RJConfig, providerId: string, modelId: 
   mkdirSync(dirname(updated.configPath), { recursive: true });
   writeFileSync(updated.configPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
   return updated;
-}
+};
 
+/** 提示历史文件路径 */
 const promptHistoryPath = join(homedir(), ".RJ", "prompt_history.json");
+
+/** 最多保留的提示历史条数 */
 const MAX_PROMPT_HISTORY = 20;
 
-export function loadPromptHistory(): string[] {
+/**
+ * 从文件加载提示历史，文件不存在或解析失败返回空数组。
+ */
+export const loadPromptHistory = (): string[] => {
   if (!existsSync(promptHistoryPath)) return [];
   try {
     const raw = JSON.parse(readFileSync(promptHistoryPath, "utf8")) as unknown;
@@ -184,16 +222,22 @@ export function loadPromptHistory(): string[] {
   } catch {
     return [];
   }
-}
+};
 
-export function savePromptHistory(history: string[]): void {
+/**
+ * 将提示历史持久化到文件，超出上限时截断旧记录。
+ */
+export const savePromptHistory = (history: string[]): void => {
   const trimmed = history.slice(-MAX_PROMPT_HISTORY);
   mkdirSync(dirname(promptHistoryPath), { recursive: true });
   writeFileSync(promptHistoryPath, `${JSON.stringify(trimmed, null, 2)}\n`, "utf8");
-}
+};
 
-export function formatContextWindow(tokens: number): string {
+/**
+ * 将 token 数格式化为可读字符串（如 200k、1.5M）。
+ */
+export const formatContextWindow = (tokens: number): string => {
   if (tokens >= 1000000) return `${Number((tokens / 1000000).toFixed(1))}M`;
   if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
   return String(tokens);
-}
+};

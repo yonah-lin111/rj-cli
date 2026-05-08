@@ -1,3 +1,4 @@
+/** 斜杠命令执行时的上下文信息 */
 export interface AppCommandContext {
   cwd: string;
   provider: string;
@@ -14,6 +15,7 @@ export interface AppCommandContext {
   startedAt: Date;
 }
 
+/** 斜杠命令执行结果 */
 export type CommandAction =
   | { type: "messages"; messages: string[] }
   | { type: "system-messages"; messages: string[] }
@@ -21,6 +23,7 @@ export type CommandAction =
   | { type: "clear"; messages?: string[] }
   | { type: "quit" };
 
+/** 斜杠命令定义 */
 export interface SlashCommand {
   name: string;
   usage: string;
@@ -28,6 +31,7 @@ export interface SlashCommand {
   handler: (args: string[], context: AppCommandContext) => CommandAction;
 }
 
+/** 内置斜杠命令列表 */
 const commandList: SlashCommand[] = [
   {
     name: "/help",
@@ -58,11 +62,15 @@ const commandList: SlashCommand[] = [
   },
 ];
 
-export function getCommands(): SlashCommand[] {
-  return commandList;
-}
+/**
+ * 返回所有已注册的斜杠命令。
+ */
+export const getCommands = (): SlashCommand[] => commandList;
 
-export function helpText(): string {
+/**
+ * 生成帮助文本，包含命令列表和快捷键说明。
+ */
+export const helpText = (): string => {
   const keybindings = [
     "Keybindings:",
     "Ctrl+C".padEnd(16) + "Clear input, or exit if empty",
@@ -80,12 +88,15 @@ export function helpText(): string {
     "",
     "Prefix with ! to run bash, e.g. !pwd",
   ].join("\n");
-}
+};
 
-export function executeSlashCommand(
+/**
+ * 解析并执行斜杠命令，命令不存在时返回错误提示。
+ */
+export const executeSlashCommand = (
   input: string,
   context: AppCommandContext,
-): CommandAction {
+): CommandAction => {
   const [name = "", ...args] = input.trim().split(/\s+/);
   const command = commandList.find((item) => item.name === name);
   if (!command) {
@@ -97,4 +108,4 @@ export function executeSlashCommand(
     };
   }
   return command.handler(args, context);
-}
+};

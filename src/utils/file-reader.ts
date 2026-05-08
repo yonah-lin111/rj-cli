@@ -1,37 +1,52 @@
 import { accessSync, constants, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
-import type { RJFileReadingConfig } from "./config.js";
+import type { RJFileReadingConfig } from "../core/config.ts";
 
+/** 匹配 Unicode 非标准空格字符 */
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 
-function normalizeUnicodeSpaces(str: string): string {
-  return str.replace(UNICODE_SPACES, " ");
-}
+/**
+ * 将 Unicode 非标准空格替换为普通空格。
+ */
+const normalizeUnicodeSpaces = (str: string): string =>
+  str.replace(UNICODE_SPACES, " ");
 
-function expandPath(filePath: string): string {
+/**
+ * 展开路径中的 ~ 为用户主目录。
+ */
+const expandPath = (filePath: string): string => {
   const normalized = normalizeUnicodeSpaces(filePath);
   if (normalized === "~") return homedir();
   if (normalized.startsWith("~/")) return homedir() + normalized.slice(1);
   return normalized;
-}
+};
 
-function resolveFilePath(filePath: string, cwd: string): string {
+/**
+ * 将文件路径解析为绝对路径，相对路径基于 cwd 解析。
+ */
+const resolveFilePath = (filePath: string, cwd: string): string => {
   const expanded = expandPath(filePath);
   if (isAbsolute(expanded)) return expanded;
   return resolve(cwd, expanded);
-}
+};
 
-function fileExists(filePath: string): boolean {
+/**
+ * 检查文件是否可访问。
+ */
+const fileExists = (filePath: string): boolean => {
   try {
     accessSync(filePath, constants.F_OK);
     return true;
   } catch {
     return false;
   }
-}
+};
 
-function listDirectory(dirPath: string, maxEntries: number): string {
+/**
+ * 列出目录内容，目录优先，超出 maxEntries 时追加省略提示。
+ */
+const listDirectory = (dirPath: string, maxEntries: number): string => {
   try {
     const entries = readdirSync(dirPath, { withFileTypes: true });
     const sorted = entries
@@ -48,25 +63,24 @@ function listDirectory(dirPath: string, maxEntries: number): string {
   } catch {
     return "(unable to read directory)";
   }
-}
+};
 
+/** @ 引用解析结果 */
 export interface AtMention {
-  raw: string;       // original token e.g. "@src/app.ts"
-  path: string;      // resolved absolute path
+  /** 原始 token，如 "@src/app.ts" */
+  raw: string;
+  /** 解析后的绝对路径 */
+  path: string;
   isDirectory: boolean;
   exists: boolean;
 }
 
 /**
- * Extract @mention tokens and bare file paths from user input text.
- * Handles:
- *   @path, @"path with spaces"
- *   /absolute/path
- *   ./relative or ../relative
+ * 从用户输入中提取所有 @mention 和裸文件路径。
+ * 支持 @path、@"path with spaces"、/absolute/path、./relative 等格式。
  */
-export function extractAtMentions(text: string, cwd: string): AtMention[] {
+export const extractAtMentions = (text: string, cwd: string): AtMention[] => {
   const mentions: AtMention[] = [];
-  // Match @"quoted path", @unquoted-token, absolute paths, or relative paths
   const pattern = /@"([^"]+)"|@(\S+)|((?:\/|\.\.?\/)\S+)/g;
   let match: RegExpExecArray | null;
 
@@ -77,7 +91,8 @@ export function extractAtMentions(text: string, cwd: string): AtMention[] {
 
     const absPath = resolveFilePath(pathPart, cwd);
     const exists = fileExists(absPath);
-    if (!exists && match[3]) continue; // skip bare paths that don't exist
+    // 裸路径（非 @ 前缀）不存在时跳过，避免误匹配
+    if (!exists && match[3]) continue;
     let isDirectory = false;
     if (exists) {
       try {
@@ -91,14 +106,17 @@ export function extractAtMentions(text: string, cwd: string): AtMention[] {
   }
 
   return mentions;
-}
+};
 
 /**
- * Expand @mentions in text: replace each @token with a <file> block containing
- * the file content (or directory listing). Returns the expanded text and a list
- * of warnings for missing paths.
+ * 将文本中的 @mention 替换为 <file> 块（文件内容或目录列表）。
+ * 返回展开后的文本和警告信息列表。
  */
-export function expandAtMentions(text: string, cwd: string, config?: RJFileReadingConfig): { expanded: string; warnings: string[] } {
+export const expandAtMentions = (
+  text: string,
+  cwd: string,
+  config?: RJFileReadingConfig,
+): { expanded: string; warnings: string[] } => {
   const mentions = extractAtMentions(text, cwd);
   if (mentions.length === 0) return { expanded: text, warnings: [] };
 
@@ -146,11 +164,9 @@ export function expandAtMentions(text: string, cwd: string, config?: RJFileReadi
   }
 
   return { expanded: result, warnings };
-}
+};
 
 /**
- * List files/dirs in cwd for display (used when user types bare @).
+ * 列出 cwd 下的文件和目录，用于 @ 裸触发时的提示展示。
  */
-export function listCwd(cwd: string): string {
-  return listDirectory(cwd, 200);
-}
+export const listCwd = (cwd: string): string => listDirectory(cwd, 200);

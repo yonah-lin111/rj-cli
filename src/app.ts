@@ -1,14 +1,22 @@
-import { Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, type Focusable, type SelectItem } from "@mariozechner/pi-tui";
-import { runBash } from "./bash.js";
-import { streamChat, type ChatHistoryMessage } from "./ai.js";
-import { formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory, saveDefaultModel, savePromptHistory, type RJConfig, type RJModelConfig } from "./config.js";
-import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./commands.js";
-import { Footer } from "./components/footer.js";
-import { MessagesView, type Message } from "./components/messages.js";
-import { editorTheme, theme } from "./theme.js";
-import { expandAtMentions } from "./file-reader.js";
-import { RJAutocompleteProvider } from "./autocomplete.js";
+import {
+  Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI,
+  getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
+  type Focusable, type SelectItem,
+} from "@mariozechner/pi-tui";
+import { runBash } from "./utils/bash.ts";
+import { streamChat, type ChatHistoryMessage } from "./core/ai.ts";
+import {
+  formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
+  saveDefaultModel, savePromptHistory, type RJConfig, type RJModelConfig,
+} from "./core/config.ts";
+import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./core/commands.ts";
+import { Footer } from "./ui/footer.ts";
+import { MessagesView, type Message } from "./ui/messages.ts";
+import { editorTheme, theme } from "./ui/theme.ts";
+import { expandAtMentions } from "./utils/file-reader.ts";
+import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
 
+/** 应用运行时状态 */
 export interface AppState {
   cwd: string;
   provider: string;
@@ -27,7 +35,10 @@ export interface AppState {
   startedAt: Date;
 }
 
-function createInitialState(config: RJConfig): AppState {
+/**
+ * 根据配置创建初始应用状态。
+ */
+const createInitialState = (config: RJConfig): AppState => {
   const provider = getProvider(config, config.defaultProvider);
   const model = getModel(provider, config.defaultModel);
 
@@ -47,9 +58,12 @@ function createInitialState(config: RJConfig): AppState {
     commandCount: 0,
     startedAt: new Date(),
   };
-}
+};
 
-function headerText(): string {
+/**
+ * 生成 ASCII logo 头部文本。
+ */
+const headerText = (): string => {
   const logo = [
     "██████╗        ██╗",
     "██╔══██╗       ██║",
@@ -59,8 +73,9 @@ function headerText(): string {
     "╚═╝  ╚═╝  ╚═════╝ ",
   ].join("\n");
   return `${theme.logo(logo)} ${theme.dim("v0.1.0")}`;
-}
+};
 
+/** 模型选择器组件 */
 class ModelSelector extends Container implements Focusable {
   private search = new Input();
   private list: SelectList;
@@ -68,7 +83,13 @@ class ModelSelector extends Container implements Focusable {
 
   focused = false;
 
-  constructor(models: RJModelConfig[], currentModelId: string, onSelect: (modelId: string) => void, onCancel: () => void, initialSearch = "") {
+  constructor(
+    models: RJModelConfig[],
+    currentModelId: string,
+    onSelect: (modelId: string) => void,
+    onCancel: () => void,
+    initialSearch = "",
+  ) {
     super();
 
     const items = models.map((model) => ({
@@ -99,7 +120,12 @@ class ModelSelector extends Container implements Focusable {
 
   handleInput(keyData: string): void {
     const kb = getKeybindings();
-    if (kb.matches(keyData, "tui.select.up") || kb.matches(keyData, "tui.select.down") || kb.matches(keyData, "tui.select.confirm") || kb.matches(keyData, "tui.select.cancel")) {
+    if (
+      kb.matches(keyData, "tui.select.up") ||
+      kb.matches(keyData, "tui.select.down") ||
+      kb.matches(keyData, "tui.select.confirm") ||
+      kb.matches(keyData, "tui.select.cancel")
+    ) {
       this.list.handleInput(keyData);
       return;
     }
@@ -124,6 +150,7 @@ class ModelSelector extends Container implements Focusable {
   }
 }
 
+/** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
 export class RJApp {
   private config = loadConfig();
   private promptHistory: string[] = loadPromptHistory();
@@ -318,10 +345,20 @@ export class RJApp {
     }
   }
 
+  /**
+   * 构建发送给 AI 的对话历史，过滤掉非对话消息和已取消的消息。
+   */
   private chatHistory(): ChatHistoryMessage[] {
     return this.messages
-      .filter((message) => (message.kind === "user" || message.kind === "assistant") && message.text.trim() && !message.strikethrough)
-      .map((message) => ({ role: message.kind as "user" | "assistant", content: (message.expandedText ?? message.text).trim() }));
+      .filter((message) =>
+        (message.kind === "user" || message.kind === "assistant") &&
+        message.text.trim() &&
+        !message.strikethrough,
+      )
+      .map((message) => ({
+        role: message.kind as "user" | "assistant",
+        content: (message.expandedText ?? message.text).trim(),
+      }));
   }
 
   private updateContextUsage(): void {
@@ -331,6 +368,9 @@ export class RJApp {
     this.state.contextPercent = percent.toFixed(1);
   }
 
+  /**
+   * 按字符数粗略估算 token 用量（4 字符 ≈ 1 token）。
+   */
   private estimateContextTokens(): number {
     return this.chatHistory().reduce((total, message) => total + Math.ceil(message.content.length / 4) + 4, 0);
   }
@@ -353,6 +393,7 @@ export class RJApp {
   private showPrompt(message: string): void {
     if (this.promptTimer) clearTimeout(this.promptTimer);
     this.state.prompt = message;
+    // 3 秒后自动清除提示
     this.promptTimer = setTimeout(() => {
       this.state.prompt = undefined;
       this.promptTimer = undefined;
@@ -403,6 +444,7 @@ export class RJApp {
       return;
     }
 
+    // !! 前缀表示不将结果注入上下文
     const noContext = text.startsWith("!!");
     const command = text.slice(noContext ? 2 : 1).trim();
     if (!command) {
@@ -511,13 +553,19 @@ export class RJApp {
   }
 }
 
-export async function startInteractiveApp(): Promise<void> {
+/**
+ * 启动交互式 TUI 应用。
+ */
+export const startInteractiveApp = async (): Promise<void> => {
   const app = new RJApp();
   await app.start();
-}
+};
 
-export function getHelpOutput(): string {
-  return [
+/**
+ * 生成 --help 输出文本。
+ */
+export const getHelpOutput = (): string =>
+  [
     "RJ v0.1.0",
     "",
     "Usage:",
@@ -527,4 +575,3 @@ export function getHelpOutput(): string {
     "",
     helpText(),
   ].join("\n");
-}

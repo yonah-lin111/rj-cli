@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { getHelpOutput, startInteractiveApp } from "./app.js";
+import { getHelpOutput, startInteractiveApp } from "./app.ts";
 
 const args = process.argv.slice(2);
 

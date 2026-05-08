@@ -1,11 +1,13 @@
 import OpenAI from "openai";
-import type { RJProviderConfig } from "./config.js";
+import type { RJProviderConfig } from "./config.ts";
 
+/** AI 对话历史消息 */
 export interface ChatHistoryMessage {
   role: "user" | "assistant";
   content: string;
 }
 
+/** 流式调用选项 */
 interface StreamChatOptions {
   provider: RJProviderConfig;
   model: string;
@@ -15,28 +17,42 @@ interface StreamChatOptions {
   onDelta: (delta: ChatDelta) => void;
 }
 
+/** 单次流式增量内容 */
 export interface ChatDelta {
   content?: string;
   thinking?: string;
 }
 
+/** 单次请求允许的最大输出 token 数 */
 const maxAllowedOutputTokens = 32768;
+
+/** 各提供商思考内容字段名（兼容多种 API） */
 const thinkingDeltaKeys = ["reasoning_content", "reasoning", "reasoning_text", "thinking"];
 
-function clampMaxTokens(value: number): number {
+/**
+ * 将 maxTokens 限制在合法范围内。
+ */
+const clampMaxTokens = (value: number): number => {
   if (!Number.isFinite(value)) return maxAllowedOutputTokens;
   return Math.min(maxAllowedOutputTokens, Math.max(1, Math.floor(value)));
-}
+};
 
-function readTextField(record: Record<string, unknown>, keys: string[]): string | undefined {
+/**
+ * 从 Record 中按候选 key 列表读取第一个非空字符串值。
+ */
+const readTextField = (record: Record<string, unknown>, keys: string[]): string | undefined => {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "string" && value) return value;
   }
   return undefined;
-}
+};
 
-export async function streamChat(options: StreamChatOptions): Promise<void> {
+/**
+ * 以流式方式调用 AI 模型，通过 onDelta 回调逐步返回内容和思考过程。
+ * 响应为空时抛出错误。
+ */
+export const streamChat = async (options: StreamChatOptions): Promise<void> => {
   const { provider, model, messages, maxTokens, signal, onDelta } = options;
   if (!provider.baseURL) throw new Error(`Provider ${provider.name} is missing baseURL.`);
   if (!provider.apiKey) throw new Error(`Provider ${provider.name} is missing apiKey.`);
@@ -67,4 +83,4 @@ export async function streamChat(options: StreamChatOptions): Promise<void> {
   }
 
   if (!hasOutput) throw new Error("AI response was empty.");
-}
+};

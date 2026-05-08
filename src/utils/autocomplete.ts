@@ -4,16 +4,20 @@ import { basename, dirname, join, relative } from "node:path";
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@mariozechner/pi-tui";
 import { CombinedAutocompleteProvider, fuzzyFilter } from "@mariozechner/pi-tui";
 
-// --- gitignore support ---
+// --- gitignore 支持 ---
 
+/** gitignore 规则 */
 interface GitignoreRule {
   pattern: RegExp;
   negated: boolean;
   dirOnly: boolean;
 }
 
-function gitignorePatternToRegex(pattern: string): RegExp {
-  // Strip trailing spaces (unless escaped)
+/**
+ * 将 gitignore 模式字符串转换为正则表达式。
+ */
+const gitignorePatternToRegex = (pattern: string): RegExp => {
+  // 去除未转义的尾部空格
   pattern = pattern.replace(/(?<!\\) +$/, "");
 
   let dirOnly = false;
@@ -22,38 +26,39 @@ function gitignorePatternToRegex(pattern: string): RegExp {
     pattern = pattern.slice(0, -1);
   }
 
-  // If pattern contains no slash (except trailing, already removed), match basename only
+  // 不含斜杠的模式只匹配文件名
   const matchBasenameOnly = !pattern.includes("/");
 
-  // Escape regex special chars except * ? and [
+  // 转义正则特殊字符，保留 * ? [
   let re = pattern.replace(/[.+^${}()|[\]\\]/g, (c) => (c === "\\" ? "\\\\" : `\\${c}`));
 
-  // Convert glob to regex
+  // 将 glob 语法转为正则
   re = re
-    .replace(/\*\*/g, "\x00") // placeholder for **
+    .replace(/\*\*/g, "\x00") // 占位符替换 **
     .replace(/\*/g, "[^/]*")
     .replace(/\?/g, "[^/]")
-    .replace(/\x00/g, ".*"); // ** matches anything including /
+    .replace(/\x00/g, ".*"); // ** 匹配任意路径
 
   if (matchBasenameOnly) {
     re = `(^|/)${re}(/|$)`;
   } else {
-    // Anchored to root of the repo
     if (!re.startsWith("/")) re = `^${re}`;
     else re = `^${re.slice(1)}`;
     re = `${re}(/|$)`;
   }
 
   return new RegExp(re);
-}
+};
 
-function parseGitignore(gitignorePath: string): GitignoreRule[] {
+/**
+ * 解析 .gitignore 文件，返回规则列表。
+ */
+const parseGitignore = (gitignorePath: string): GitignoreRule[] => {
   try {
     const content = readFileSync(gitignorePath, "utf-8");
     const rules: GitignoreRule[] = [];
     for (const rawLine of content.split("\n")) {
       let line = rawLine;
-      // Skip comments and empty lines
       if (line.startsWith("#") || line.trim() === "") continue;
       const negated = line.startsWith("!");
       if (negated) line = line.slice(1);
@@ -61,17 +66,19 @@ function parseGitignore(gitignorePath: string): GitignoreRule[] {
       try {
         rules.push({ pattern: gitignorePatternToRegex(line), negated, dirOnly });
       } catch {
-        // skip malformed patterns
+        // 跳过格式错误的规则
       }
     }
     return rules;
   } catch {
     return [];
   }
-}
+};
 
-function isIgnored(relPath: string, isDirectory: boolean, rules: GitignoreRule[]): boolean {
-  // Normalize to forward slashes
+/**
+ * 判断路径是否被 gitignore 规则忽略。
+ */
+const isIgnored = (relPath: string, isDirectory: boolean, rules: GitignoreRule[]): boolean => {
   const normalized = relPath.replace(/\\/g, "/");
   let ignored = false;
   for (const rule of rules) {
@@ -81,12 +88,15 @@ function isIgnored(relPath: string, isDirectory: boolean, rules: GitignoreRule[]
     }
   }
   return ignored;
-}
+};
 
-// Cache gitignore rules per directory to avoid re-reading on every keystroke
+/** gitignore 规则缓存，按目录存储，避免每次按键重复读取 */
 const gitignoreCache = new Map<string, { rules: GitignoreRule[]; mtime: number }>();
 
-function getGitignoreRules(repoRoot: string): GitignoreRule[] {
+/**
+ * 获取指定仓库根目录的 gitignore 规则，结果按 mtime 缓存。
+ */
+const getGitignoreRules = (repoRoot: string): GitignoreRule[] => {
   const gitignorePath = join(repoRoot, ".gitignore");
   if (!existsSync(gitignorePath)) return [];
   try {
@@ -99,9 +109,12 @@ function getGitignoreRules(repoRoot: string): GitignoreRule[] {
   } catch {
     return [];
   }
-}
+};
 
-function findGitRoot(startDir: string): string | null {
+/**
+ * 向上查找 .git 目录，返回仓库根路径，找不到返回 null。
+ */
+const findGitRoot = (startDir: string): string | null => {
   let dir = startDir;
   while (true) {
     if (existsSync(join(dir, ".git"))) return dir;
@@ -109,28 +122,38 @@ function findGitRoot(startDir: string): string | null {
     if (parent === dir) return null;
     dir = parent;
   }
-}
+};
 
+/** 路径分隔符集合，用于定位 token 起始位置 */
 const PATH_DELIMITERS = new Set([" ", "\t", '"', "'", "="]);
 
-function findLastDelimiter(text: string): number {
+/**
+ * 从文本末尾向前查找最后一个路径分隔符的位置。
+ */
+const findLastDelimiter = (text: string): number => {
   for (let i = text.length - 1; i >= 0; i--) {
     if (PATH_DELIMITERS.has(text[i] ?? "")) return i;
   }
   return -1;
-}
+};
 
-function expandHome(p: string): string {
+/**
+ * 展开路径中的 ~ 为用户主目录。
+ */
+const expandHome = (p: string): string => {
   if (p === "~") return homedir();
   if (p.startsWith("~/")) return homedir() + p.slice(1);
   return p;
-}
+};
 
-function buildSuggestion(
+/**
+ * 根据条目名称和前缀构建自动补全建议项。
+ */
+const buildSuggestion = (
   entryName: string,
   isDirectory: boolean,
   rawPrefix: string,
-): AutocompleteItem {
+): AutocompleteItem => {
   let relativePath: string;
   if (rawPrefix.endsWith("/")) {
     relativePath = rawPrefix + entryName;
@@ -157,9 +180,12 @@ function buildSuggestion(
     label: entryName + (isDirectory ? "/" : ""),
     description: relativePath,
   };
-}
+};
 
-function getFileSuggestions(rawPrefix: string, basePath: string): { items: AutocompleteItem[]; searchPrefix: string } {
+/**
+ * 根据当前输入前缀列出文件系统建议，同时应用 gitignore 过滤。
+ */
+const getFileSuggestions = (rawPrefix: string, basePath: string): { items: AutocompleteItem[]; searchPrefix: string } => {
   try {
     const expanded = expandHome(rawPrefix);
     let searchDir: string;
@@ -197,7 +223,7 @@ function getFileSuggestions(rawPrefix: string, basePath: string): { items: Autoc
       if (!isDirectory && entry.isSymbolicLink()) {
         try {
           isDirectory = statSync(join(searchDir, entry.name)).isDirectory();
-        } catch { /* broken symlink */ }
+        } catch { /* 忽略损坏的符号链接 */ }
       }
 
       if (gitRoot && ignoreRules.length > 0) {
@@ -207,6 +233,7 @@ function getFileSuggestions(rawPrefix: string, basePath: string): { items: Autoc
       }
 
       if (isDirectory) {
+        // 目录：同时展开一层子条目，方便快速选择
         const dirRawPrefix = (rawPrefix.endsWith("/") ? rawPrefix : rawPrefix.includes("/")
           ? dirname(rawPrefix) === "." ? "" : dirname(rawPrefix) + "/"
           : "") + entry.name + "/";
@@ -227,7 +254,7 @@ function getFileSuggestions(rawPrefix: string, basePath: string): { items: Autoc
             }
             items.push(buildSuggestion(child.name, childIsDir, dirRawPrefix));
           }
-        } catch { /* unreadable dir */ }
+        } catch { /* 无法读取的目录跳过 */ }
         const dirParentPrefix = rawPrefix.endsWith("/") ? rawPrefix : rawPrefix.includes("/") ? dirname(rawPrefix) === "." ? "" : dirname(rawPrefix) + "/" : "";
         items.push(buildSuggestion(entry.name, true, dirParentPrefix));
       } else {
@@ -239,22 +266,25 @@ function getFileSuggestions(rawPrefix: string, basePath: string): { items: Autoc
   } catch {
     return { items: [], searchPrefix: "" };
   }
-}
+};
 
-function extractAtPrefix(text: string): string | null {
+/**
+ * 从光标前文本中提取 @ 前缀 token，不存在则返回 null。
+ */
+const extractAtPrefix = (text: string): string | null => {
   const lastDelim = findLastDelimiter(text);
   const tokenStart = lastDelim === -1 ? 0 : lastDelim + 1;
   if (text[tokenStart] === "@") return text.slice(tokenStart);
   return null;
-}
+};
 
 /**
- * Wraps CombinedAutocompleteProvider and adds @ file completion fallback
- * using readdirSync when fd is not available.
+ * 封装 CombinedAutocompleteProvider，在其基础上增加 @ 文件路径补全能力。
  */
 export class RJAutocompleteProvider implements AutocompleteProvider {
   private inner: CombinedAutocompleteProvider;
   private basePath: string;
+  /** 记录上次补全来源，用于 applyCompletion 分支判断 */
   private lastCompletionSource: "at" | "inner" = "inner";
 
   constructor(
@@ -276,7 +306,7 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
 
     const atPrefix = extractAtPrefix(textBeforeCursor);
     if (atPrefix !== null) {
-      const rawPrefix = atPrefix.slice(1); // strip leading @
+      const rawPrefix = atPrefix.slice(1); // 去掉开头的 @
       const { items, searchPrefix } = getFileSuggestions(rawPrefix, this.basePath);
       const filtered = searchPrefix
         ? fuzzyFilter(items, searchPrefix, (item) => item.label.replace(/\/$/, ""))
@@ -292,7 +322,7 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
       return { items: filtered, prefix: atPrefix };
     }
 
-    // Delegate slash commands and other completions to inner provider
+    // 委托给内置提供商处理斜杠命令和其他补全
     const result = await this.inner.getSuggestions(lines, cursorLine, cursorCol, options);
     if (result) this.lastCompletionSource = "inner";
     return result;
@@ -309,11 +339,10 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
       return this.inner.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
     }
 
-    // @ file completion
+    // @ 文件补全：直接替换当前行的前缀部分
     const currentLine = lines[cursorLine] ?? "";
     const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
     const afterCursor = currentLine.slice(cursorCol);
-    const isDirectory = item.label.endsWith("/");
     const newLine = beforePrefix + item.value + afterCursor;
     const newLines = [...lines];
     newLines[cursorLine] = newLine;
@@ -328,6 +357,7 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
   shouldTriggerFileCompletion(lines: string[], cursorLine: number, cursorCol: number): boolean {
     const currentLine = lines[cursorLine] ?? "";
     const textBeforeCursor = currentLine.slice(0, cursorCol);
+    // 斜杠命令不触发文件补全
     if (textBeforeCursor.trim().startsWith("/") && !textBeforeCursor.trim().includes(" ")) {
       return false;
     }

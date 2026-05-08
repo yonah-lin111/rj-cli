@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+/** bash 命令执行结果 */
 export interface BashResult {
   command: string;
   stdout: string;
@@ -8,7 +9,10 @@ export interface BashResult {
   signal: NodeJS.Signals | null;
 }
 
-export function runBash(command: string, cwd = process.cwd()): Promise<BashResult> {
+/**
+ * 在指定工作目录中执行 bash 命令，返回 stdout、stderr 和退出码。
+ */
+export const runBash = (command: string, cwd = process.cwd()): Promise<BashResult> => {
   const shell = process.env.SHELL || "/bin/zsh";
 
   return new Promise((resolve, reject) => {
@@ -34,4 +38,4 @@ export function runBash(command: string, cwd = process.cwd()): Promise<BashResul
       resolve({ command, stdout, stderr, exitCode, signal });
     });
   });
-}
+};

@@ -4,8 +4,9 @@ import {
   truncateToWidth,
   wrapTextWithAnsi,
 } from "@mariozechner/pi-tui";
-import { markdownTheme, theme } from "../theme.js";
+import { markdownTheme, theme } from "./theme.ts";
 
+/** 消息类型 */
 export type MessageKind =
   | "user"
   | "assistant"
@@ -14,15 +15,18 @@ export type MessageKind =
   | "error"
   | "warning";
 
+/** 单条聊天消息 */
 export interface Message {
   kind: MessageKind;
   text: string;
+  /** 展开 @mention 后的完整文本，用于发送给 AI */
   expandedText?: string;
   label?: string;
   thinking?: string;
   strikethrough?: boolean;
 }
 
+/** 各消息类型对应的颜色函数 */
 const colors: Record<MessageKind, (text: string) => string> = {
   user: theme.user,
   assistant: theme.assistant,
@@ -32,6 +36,7 @@ const colors: Record<MessageKind, (text: string) => string> = {
   warning: theme.warning,
 };
 
+/** 各消息类型对应的默认文本样式 */
 const textStyles: Record<MessageKind, DefaultTextStyle> = {
   user: {},
   assistant: {},
@@ -41,25 +46,37 @@ const textStyles: Record<MessageKind, DefaultTextStyle> = {
   warning: { color: theme.warning },
 };
 
-function messageHeader(message: Message): string {
+/**
+ * 生成消息头部标签行。
+ */
+const messageHeader = (message: Message): string => {
   const label = message.label ?? message.kind;
   return `${colors[message.kind](label + ":")}`;
-}
+};
 
-function renderMarkdown(
+/**
+ * 将文本渲染为带样式的 Markdown 行数组。
+ */
+const renderMarkdown = (
   text: string,
   width: number,
   style: DefaultTextStyle,
-): string[] {
-  return new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
-}
+): string[] =>
+  new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
 
-function applyMessageStyle(lines: string[], message: Message): string[] {
+/**
+ * 对消息行应用删除线样式（用于已取消的对话）。
+ */
+const applyMessageStyle = (lines: string[], message: Message): string[] => {
   if (!message.strikethrough) return lines;
   return lines.map((line) => theme.dim(theme.strikethrough(line)));
-}
+};
 
-export function formatMessage(message: Message, width = 80): string[] {
+/**
+ * 将消息格式化为终端渲染行数组。
+ * assistant 消息额外支持思考内容展示。
+ */
+export const formatMessage = (message: Message, width = 80): string[] => {
   const header = messageHeader(message);
   const contentWidth = Math.max(20, width - 2);
 
@@ -93,8 +110,9 @@ export function formatMessage(message: Message, width = 80): string[] {
       ),
     );
   return applyMessageStyle(lines, message);
-}
+};
 
+/** 消息列表视图组件，最多渲染最近 maxRendered 条消息 */
 export class MessagesView implements Component {
   constructor(
     private getMessages: () => Message[],
