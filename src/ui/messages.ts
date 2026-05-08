@@ -109,15 +109,11 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
 };
 
 /** 渲染 assistant 消息的一个段落 */
-const renderSegment = (seg: AssistantSegment, contentWidth: number, isFirst: boolean): string[] => {
+const renderSegment = (seg: AssistantSegment, contentWidth: number): string[] => {
   const lines: string[] = [];
   if (seg.thinking?.trim()) {
     const thinkingText = seg.thinking.trim().replace(/\n/g, " ");
-    if (isFirst) {
-      lines.push(`${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`);
-    } else {
-      lines.push(theme.thinkingText(thinkingText));
-    }
+    lines.push(`${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`);
     if (seg.text.trim() || seg.toolCalls?.length) lines.push("");
   }
   if (seg.text.trim()) {
@@ -161,7 +157,7 @@ export const formatMessage = (message: Message, width = 80): string[] => {
   const lines = [header];
   if (message.segments?.length) {
     for (let i = 0; i < message.segments.length; i++) {
-      const segLines = renderSegment(message.segments[i], contentWidth, i === 0);
+      const segLines = renderSegment(message.segments[i], contentWidth);
       if (segLines.length) {
         if (i > 0) lines.push("");
         lines.push(...segLines);
