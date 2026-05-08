@@ -95,12 +95,6 @@ const renderMarkdown = (
 ): string[] =>
   new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
 
-const toolResultSummary = (entry: ToolCallEntry): string | undefined => {
-  const value = (entry.resultLabel ?? entry.resultText)?.trim();
-  if (!value) return undefined;
-  return value.replace(/\s+/g, " ").slice(0, 160);
-};
-
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
   let indicator: string;
@@ -116,11 +110,6 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
     ? theme.error(entry.callLabel)
     : theme.dim(entry.callLabel);
   const lines = [`${indicator} ${label}`];
-  const summary = toolResultSummary(entry);
-  if (summary && entry.status !== "running") {
-    const color = entry.isError || entry.status === "error" ? theme.error : theme.dim;
-    lines.push(`  ${color(summary)}`);
-  }
   return lines;
 };
 
