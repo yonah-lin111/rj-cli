@@ -312,3 +312,24 @@ export const readFileToolSchema: OpenAI.Chat.ChatCompletionTool = {
     },
   },
 };
+
+/** bash tool 的 OpenAI schema */
+export const bashToolSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "bash",
+    description:
+      "Run a non-interactive shell command in the current working directory. Use for project scripts, tests, builds, or simple commands. Do not use for interactive commands or long-running background processes.",
+    parameters: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "Non-interactive shell command to run.",
+        },
+      },
+      required: ["command"],
+      additionalProperties: false,
+    },
+  },
+};

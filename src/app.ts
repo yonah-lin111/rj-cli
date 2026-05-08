@@ -2,9 +2,9 @@ import {
   Container, Editor, Loader, ProcessTerminal, Spacer, Text, TUI,
   matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
 } from "@mariozechner/pi-tui";
-import { runBash } from "./tools/bash.ts";
+import { runBash, runBashTool } from "./tools/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/file-writer.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema } from "./core/ai.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema } from "./core/ai.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
   saveDefaultModel, savePromptHistory,
@@ -197,7 +197,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -216,6 +216,7 @@ export class RJApp {
           for (const call of calls) {
             let args: Record<string, unknown>;
             let path = "";
+            let command = "";
             let callLabel = call.name;
             let entry: ToolCallEntry | undefined;
 
@@ -229,7 +230,8 @@ export class RJApp {
 
             try {
               args = JSON.parse(call.arguments) as Record<string, unknown>;
-              path = (args.path as string) ?? "";
+              path = typeof args.path === "string" ? args.path : "";
+              command = typeof args.command === "string" ? args.command : "";
             } catch (err) {
               const resultText = err instanceof Error ? err.message : String(err);
               entry = { id: call.id, name: call.name, status: "error", callLabel, resultLabel: resultText, resultText, isError: true };
@@ -242,6 +244,7 @@ export class RJApp {
             if (call.name === "read_file") callLabel = `Read ${path}`;
             else if (call.name === "write_file") callLabel = `Write ${path}`;
             else if (call.name === "edit_file") callLabel = `Edit ${path}`;
+            else if (call.name === "bash") callLabel = `Bash ${command}`;
 
             entry = { id: call.id, name: call.name, status: "running", callLabel, spinnerFrame: 0 };
             if (currentSegment) {
@@ -273,12 +276,18 @@ export class RJApp {
                 resultText = `Patched ${path}`;
                 entry.resultLabel = resultText;
                 entry.resultText = resultText;
+              } else if (call.name === "bash") {
+                const result = await runBashTool(command, this.state.cwd);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
               } else {
                 resultText = `Unknown tool: ${call.name}`;
                 isError = true;
                 setToolEntry("error", resultText, true);
               }
-              if (!isError) entry.status = "completed";
+              entry.status = isError ? "error" : "completed";
             } catch (err) {
               resultText = err instanceof Error ? err.message : String(err);
               isError = true;

@@ -109,7 +109,10 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
   const label = entry.status === "error"
     ? theme.error(entry.callLabel)
     : theme.dim(entry.callLabel);
-  const lines = [`${indicator} ${label}`];
+  const resultLabel = entry.status !== "running" && entry.resultLabel
+    ? ` ${theme.dim("—")} ${entry.status === "error" ? theme.error(entry.resultLabel) : theme.dim(entry.resultLabel)}`
+    : "";
+  const lines = [`${indicator} ${label}${resultLabel}`];
   return lines;
 };
 
