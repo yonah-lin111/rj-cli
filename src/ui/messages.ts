@@ -133,9 +133,10 @@ const renderThinking = (thinking: string, width: number): string[] => {
 const renderTodoList = (entry: ToolCallEntry, width: number): string[] => {
   if (!entry.displayText) return [];
   const frame = SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length];
-  return renderMarkdown(entry.displayText, width, {}).map((line) =>
-    line.replace("[loading]", `[${theme.accent(frame!)}]`),
-  );
+  return entry.displayText.split("\n").map((line, index) => {
+    if (index === 0) return theme.todoTitle(line.replace(/^#\s*/, ""));
+    return theme.todoText(line).replace("[loading]", `[${theme.accent(frame!)}]`);
+  });
 };
 
 const latestTodoEntry = (segments: AssistantSegment[]): ToolCallEntry | undefined => {

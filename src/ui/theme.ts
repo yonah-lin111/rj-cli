@@ -15,6 +15,8 @@ export const theme = {
   assistant: chalk.hex("#86efac"),
   thinkingLabel: chalk.hex("#f7a23b").italic,
   thinkingText: chalk.hex("#a3a3a3").italic,
+  todoTitle: chalk.hex("#f0abfc").bold,
+  todoText: chalk.hex("#f5d0fe"),
   system: chalk.hex("#fef3c7"),
   systemPrompt: chalk.hex("#fef3c7").italic,
   strikethrough: chalk.strikethrough,
