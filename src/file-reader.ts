@@ -1,0 +1,156 @@
+import { accessSync, constants, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, resolve } from "node:path";
+import type { RJFileReadingConfig } from "./config.js";
+
+const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+
+function normalizeUnicodeSpaces(str: string): string {
+  return str.replace(UNICODE_SPACES, " ");
+}
+
+function expandPath(filePath: string): string {
+  const normalized = normalizeUnicodeSpaces(filePath);
+  if (normalized === "~") return homedir();
+  if (normalized.startsWith("~/")) return homedir() + normalized.slice(1);
+  return normalized;
+}
+
+function resolveFilePath(filePath: string, cwd: string): string {
+  const expanded = expandPath(filePath);
+  if (isAbsolute(expanded)) return expanded;
+  return resolve(cwd, expanded);
+}
+
+function fileExists(filePath: string): boolean {
+  try {
+    accessSync(filePath, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function listDirectory(dirPath: string, maxEntries: number): string {
+  try {
+    const entries = readdirSync(dirPath, { withFileTypes: true });
+    const sorted = entries
+      .sort((a, b) => {
+        if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    const limited = sorted.slice(0, maxEntries);
+    const lines = limited.map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name));
+    if (sorted.length > maxEntries) {
+      lines.push(`... (${sorted.length - maxEntries} more entries)`);
+    }
+    return lines.join("\n");
+  } catch {
+    return "(unable to read directory)";
+  }
+}
+
+export interface AtMention {
+  raw: string;       // original token e.g. "@src/app.ts"
+  path: string;      // resolved absolute path
+  isDirectory: boolean;
+  exists: boolean;
+}
+
+/**
+ * Extract @mention tokens and bare file paths from user input text.
+ * Handles:
+ *   @path, @"path with spaces"
+ *   /absolute/path
+ *   ./relative or ../relative
+ */
+export function extractAtMentions(text: string, cwd: string): AtMention[] {
+  const mentions: AtMention[] = [];
+  // Match @"quoted path", @unquoted-token, absolute paths, or relative paths
+  const pattern = /@"([^"]+)"|@(\S+)|((?:\/|\.\.?\/)\S+)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const rawToken = match[0];
+    const pathPart = match[1] ?? match[2] ?? match[3] ?? "";
+    if (!pathPart) continue;
+
+    const absPath = resolveFilePath(pathPart, cwd);
+    const exists = fileExists(absPath);
+    if (!exists && match[3]) continue; // skip bare paths that don't exist
+    let isDirectory = false;
+    if (exists) {
+      try {
+        isDirectory = statSync(absPath).isDirectory();
+      } catch {
+        // ignore
+      }
+    }
+
+    mentions.push({ raw: rawToken, path: absPath, isDirectory, exists });
+  }
+
+  return mentions;
+}
+
+/**
+ * Expand @mentions in text: replace each @token with a <file> block containing
+ * the file content (or directory listing). Returns the expanded text and a list
+ * of warnings for missing paths.
+ */
+export function expandAtMentions(text: string, cwd: string, config?: RJFileReadingConfig): { expanded: string; warnings: string[] } {
+  const mentions = extractAtMentions(text, cwd);
+  if (mentions.length === 0) return { expanded: text, warnings: [] };
+
+  const maxSize = config?.maxFileSizeBytes ?? 1048576;
+  const maxEntries = config?.maxDirectoryEntries ?? 200;
+  const allowedExts = config?.allowedExtensions ?? [];
+
+  const warnings: string[] = [];
+  let result = text;
+
+  for (const mention of mentions) {
+    if (!mention.exists) {
+      warnings.push(`File not found: ${mention.path}`);
+      continue;
+    }
+
+    let block: string;
+    if (mention.isDirectory) {
+      const listing = listDirectory(mention.path, maxEntries);
+      block = `<file name="${mention.path}" type="directory">\n${listing}\n</file>`;
+    } else {
+      if (allowedExts.length > 0) {
+        const ext = mention.path.slice(mention.path.lastIndexOf("."));
+        if (!allowedExts.includes(ext)) {
+          warnings.push(`Skipped ${mention.path}: extension ${ext} not in allowedExtensions`);
+          continue;
+        }
+      }
+      try {
+        const stats = statSync(mention.path);
+        if (stats.size > maxSize) {
+          warnings.push(`Skipped ${mention.path}: file size ${stats.size} exceeds maxFileSizeBytes ${maxSize}`);
+          continue;
+        }
+        const content = readFileSync(mention.path, "utf-8");
+        block = `<file name="${mention.path}">\n${content}\n</file>`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warnings.push(`Could not read ${mention.path}: ${msg}`);
+        continue;
+      }
+    }
+
+    result = result.replace(mention.raw, block);
+  }
+
+  return { expanded: result, warnings };
+}
+
+/**
+ * List files/dirs in cwd for display (used when user types bare @).
+ */
+export function listCwd(cwd: string): string {
+  return listDirectory(cwd, 200);
+}

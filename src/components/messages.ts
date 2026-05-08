@@ -17,6 +17,7 @@ export type MessageKind =
 export interface Message {
   kind: MessageKind;
   text: string;
+  expandedText?: string;
   label?: string;
   thinking?: string;
   strikethrough?: boolean;

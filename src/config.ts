@@ -2,6 +2,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+export interface RJFileReadingConfig {
+  maxFileSizeBytes: number;
+  maxDirectoryEntries: number;
+  allowedExtensions: string[];
+}
+
 export interface RJModelConfig {
   id: string;
   name: string;
@@ -21,6 +27,7 @@ export interface RJProviderConfig {
 export interface RJConfig {
   defaultProvider: string;
   defaultModel: string;
+  fileReading: RJFileReadingConfig;
   providers: RJProviderConfig[];
   configPath: string;
 }
@@ -28,14 +35,22 @@ export interface RJConfig {
 interface RawRJConfig {
   defaultProvider?: unknown;
   defaultModel?: unknown;
+  fileReading?: unknown;
   providers?: unknown;
 }
 
 const configPath = join(homedir(), ".RJ", "config.json");
 
+const DEFAULT_FILE_READING: RJFileReadingConfig = {
+  maxFileSizeBytes: 1048576,
+  maxDirectoryEntries: 200,
+  allowedExtensions: [],
+};
+
 const fallbackConfig: RJConfig = {
   defaultProvider: "mock",
   defaultModel: "mock-sonnet",
+  fileReading: DEFAULT_FILE_READING,
   providers: [
     {
       id: "mock",
@@ -116,7 +131,16 @@ export function loadConfig(): RJConfig {
         ? configuredDefaultModel
         : provider.models[0]!.id;
 
-    return { defaultProvider, defaultModel, providers, configPath };
+    const fileReadingRaw = asRecord(root.fileReading);
+    const fileReading: RJFileReadingConfig = {
+      maxFileSizeBytes: (fileReadingRaw && readNumber(fileReadingRaw, "maxFileSizeBytes")) ?? DEFAULT_FILE_READING.maxFileSizeBytes,
+      maxDirectoryEntries: (fileReadingRaw && readNumber(fileReadingRaw, "maxDirectoryEntries")) ?? DEFAULT_FILE_READING.maxDirectoryEntries,
+      allowedExtensions: Array.isArray(fileReadingRaw?.allowedExtensions)
+        ? (fileReadingRaw.allowedExtensions as unknown[]).filter((e): e is string => typeof e === "string")
+        : [],
+    };
+
+    return { defaultProvider, defaultModel, fileReading, providers, configPath };
   } catch {
     return fallbackConfig;
   }

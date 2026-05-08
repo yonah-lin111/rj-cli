@@ -1,4 +1,4 @@
-import { CombinedAutocompleteProvider, Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, type Focusable, type SelectItem } from "@mariozechner/pi-tui";
+import { Container, Editor, Input, Loader, ProcessTerminal, SelectList, Spacer, Text, TUI, getKeybindings, matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, type Focusable, type SelectItem } from "@mariozechner/pi-tui";
 import { runBash } from "./bash.js";
 import { streamChat, type ChatHistoryMessage } from "./ai.js";
 import { formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory, saveDefaultModel, savePromptHistory, type RJConfig, type RJModelConfig } from "./config.js";
@@ -6,6 +6,8 @@ import { executeSlashCommand, getCommands, helpText, type AppCommandContext } fr
 import { Footer } from "./components/footer.js";
 import { MessagesView, type Message } from "./components/messages.js";
 import { editorTheme, theme } from "./theme.js";
+import { expandAtMentions } from "./file-reader.js";
+import { RJAutocompleteProvider } from "./autocomplete.js";
 
 export interface AppState {
   cwd: string;
@@ -177,13 +179,12 @@ export class RJApp {
 
   private setupEditor(): void {
     this.editor.setAutocompleteProvider(
-      new CombinedAutocompleteProvider(
+      new RJAutocompleteProvider(
         getCommands().map((command) => ({
           name: command.name.slice(1),
           description: command.description,
         })),
         this.state.cwd,
-        null,
       ),
     );
 
@@ -262,8 +263,14 @@ export class RJApp {
       return;
     }
 
+    const { expanded, warnings } = expandAtMentions(text, this.state.cwd, this.config.fileReading);
+    for (const warning of warnings) {
+      this.addMessage("warning", warning, "warning");
+    }
+
     this.runningAI = true;
     const user = this.addMessage("user", text, "user");
+    if (expanded !== text) user.expandedText = expanded;
     this.activeQA = { user };
     this.state.messageCount++;
     this.updateContextUsage();
@@ -314,7 +321,7 @@ export class RJApp {
   private chatHistory(): ChatHistoryMessage[] {
     return this.messages
       .filter((message) => (message.kind === "user" || message.kind === "assistant") && message.text.trim() && !message.strikethrough)
-      .map((message) => ({ role: message.kind as "user" | "assistant", content: message.text.trim() }));
+      .map((message) => ({ role: message.kind as "user" | "assistant", content: (message.expandedText ?? message.text).trim() }));
   }
 
   private updateContextUsage(): void {
