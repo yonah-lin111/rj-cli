@@ -193,6 +193,12 @@ export class MessagesView implements Component {
 
     const lines: string[] = [];
     for (const message of messages) {
+      if (message.kind === "user" && lines.length > 0) {
+        if (lines[lines.length - 1] !== "") lines.push("");
+        lines.push(theme.muted("─".repeat(Math.max(20, width - 2))));
+        lines.push("");
+      }
+
       for (const part of formatMessage(message, width)) {
         const wrapped = wrapTextWithAnsi(part, Math.max(20, width - 2));
         for (const line of wrapped)
