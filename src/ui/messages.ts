@@ -18,6 +18,8 @@ export type MessageKind =
 /** tool call 状态 */
 export type ToolCallStatus = "running" | "completed" | "error";
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
 /** assistant 消息内的单条 tool call */
 export interface ToolCallEntry {
   id: string;
@@ -27,6 +29,8 @@ export interface ToolCallEntry {
   callLabel: string;
   /** 结果行，如 "Patched Desktop/hello.txt" */
   resultLabel?: string;
+  /** 当前 spinner 帧索引（running 时使用） */
+  spinnerFrame?: number;
 }
 
 /** assistant 消息的一个轮次段落：thinking + text + tool calls */
@@ -89,9 +93,19 @@ const renderMarkdown = (
 
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
-  const arrow = entry.status === "running" ? theme.accent("→") : theme.muted("→");
-  const suffix = entry.status === "error" ? ` ${theme.error("failed")}` : "";
-  return [`${arrow} ${theme.dim(entry.callLabel)}${suffix}`];
+  let indicator: string;
+  if (entry.status === "running") {
+    const frame = SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length];
+    indicator = theme.accent(frame!);
+  } else if (entry.status === "completed") {
+    indicator = theme.success("✓");
+  } else {
+    indicator = theme.error("✗");
+  }
+  const label = entry.status === "error"
+    ? theme.error(entry.callLabel)
+    : theme.dim(entry.callLabel);
+  return [`${indicator} ${label}`];
 };
 
 /** 渲染 assistant 消息的一个段落 */

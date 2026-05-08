@@ -218,11 +218,16 @@ export class RJApp {
             else if (call.name === "write_file") callLabel = `Write ${path}`;
             else if (call.name === "edit_file") callLabel = `Edit ${path}`;
 
-            const entry: ToolCallEntry = { id: call.id, name: call.name, status: "running", callLabel };
+            const entry: ToolCallEntry = { id: call.id, name: call.name, status: "running", callLabel, spinnerFrame: 0 };
             if (currentSegment) {
               currentSegment.toolCalls = [...(currentSegment.toolCalls ?? []), entry];
               this.requestRender();
             }
+
+            const spinnerTimer = setInterval(() => {
+              entry.spinnerFrame = ((entry.spinnerFrame ?? 0) + 1) % 10;
+              this.requestRender();
+            }, 80);
 
             let resultText: string;
             try {
@@ -247,6 +252,8 @@ export class RJApp {
               resultText = err instanceof Error ? err.message : String(err);
               entry.resultLabel = resultText;
               entry.status = "error";
+            } finally {
+              clearInterval(spinnerTimer);
             }
             results.push({ tool_call_id: call.id, content: resultText });
             this.requestRender();
