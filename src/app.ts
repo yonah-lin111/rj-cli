@@ -38,7 +38,9 @@ export class RJApp {
   private runningAI = false;
   private runningBash = false;
   private activeAIAbort?: AbortController;
-  private activeQA?: { user: Message; assistant?: Message };
+  private activeQA?: { user: Message; assistant?: Message; sessionStartIndex: number; promptText: string };
+  private cancelledQA?: { sessionStartIndex: number };
+  private pendingUndoPrompt?: string;
   private lastEscapeAt = 0;
   private promptTimer?: NodeJS.Timeout;
   private stopped = false;
@@ -170,28 +172,28 @@ export class RJApp {
     this.runningAI = true;
     const user = this.addMessage("user", text, "user");
     if (expanded !== text) user.expandedText = expanded;
-    this.activeQA = { user };
     this.state.messageCount++;
     this.updateContextUsage();
 
     const provider = getProvider(this.config, this.state.provider);
     const model = getModel(provider, this.state.model);
+    const sessionStartIndex = this.sessionMessages.length;
+    const userHistoryMessage: ChatHistoryMessage = { role: "user", content: expanded };
+    this.sessionMessages.push(userHistoryMessage);
+    this.updateContextUsage();
     this.startLoading(`Working with ${model.id}...`);
     this.requestRender();
 
     let assistant: Message | undefined;
     let assistantIndex = -1;
     let currentSegment: AssistantSegment | undefined;
-    const sessionStartIndex = this.sessionMessages.length;
-    const userHistoryMessage: ChatHistoryMessage = { role: "user", content: expanded };
-    this.sessionMessages.push(userHistoryMessage);
     const abortController = new AbortController();
     this.activeAIAbort = abortController;
     try {
       assistantIndex = this.messages.length;
       assistant = this.addMessage("assistant", "", "assistant");
       assistant.segments = [];
-      if (this.activeQA) this.activeQA.assistant = assistant;
+      this.activeQA = { user, assistant, sessionStartIndex, promptText: text };
       await streamChat({
         provider,
         model: model.id,
@@ -309,7 +311,7 @@ export class RJApp {
       this.updateContextUsage();
     } catch (error) {
       if (abortController.signal.aborted) {
-        this.sessionMessages.splice(sessionStartIndex);
+        if (this.cancelledQA) this.sessionMessages.splice(this.cancelledQA.sessionStartIndex);
         return;
       }
       const hasContent = assistant?.segments?.some(s => s.text.trim() || s.thinking?.trim());
@@ -321,7 +323,12 @@ export class RJApp {
     } finally {
       if (this.activeAIAbort === abortController) this.activeAIAbort = undefined;
       this.activeQA = undefined;
+      this.cancelledQA = undefined;
       this.runningAI = false;
+      if (this.pendingUndoPrompt !== undefined) {
+        this.editor.setText(this.pendingUndoPrompt);
+        this.pendingUndoPrompt = undefined;
+      }
       this.stopLoading();
       this.requestRender();
     }
@@ -363,19 +370,80 @@ export class RJApp {
     return this.chatHistory().reduce((total, message) => total + this.estimateMessageTokens(message), 0);
   }
 
-  private contextUsageDisplay(): string {
-    return `${this.state.contextPercent}%/${this.state.contextDisplay}`;
+  private resetContextUsage(): void {
+    this.state.contextTokens = 0;
+    this.state.contextPercent = "0.0";
   }
 
   private cancelAIResponse(): void {
     if (!this.runningAI) return;
     if (this.activeQA) {
+      this.activeQA.user.compact = true;
       this.activeQA.user.strikethrough = true;
-      if (this.activeQA.assistant) this.activeQA.assistant.strikethrough = true;
+      this.cancelledQA = { sessionStartIndex: this.activeQA.sessionStartIndex };
+      if (this.activeQA.assistant) {
+        this.activeQA.assistant.compact = true;
+        this.activeQA.assistant.strikethrough = true;
+      }
     }
     this.activeAIAbort?.abort();
     this.showPrompt("Response cancelled");
     this.requestRender();
+  }
+
+  private undoLastQA(): void {
+    let assistantIndex = -1;
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i]?.kind === "assistant") {
+        assistantIndex = i;
+        break;
+      }
+    }
+    if (assistantIndex <= 0) {
+      this.showPrompt("No QA to undo.");
+      return;
+    }
+
+    let userIndex = -1;
+    for (let i = assistantIndex - 1; i >= 0; i--) {
+      if (this.messages[i]?.kind === "user") {
+        userIndex = i;
+        break;
+      }
+    }
+    if (userIndex < 0) {
+      this.showPrompt("No QA to undo.");
+      return;
+    }
+
+    const userPrompt = this.messages[userIndex]?.text ?? "";
+    this.messages.splice(userIndex, assistantIndex - userIndex + 1);
+    this.removeLastSessionQA();
+    this.state.messageCount = Math.max(0, this.state.messageCount - 2);
+    this.updateContextUsage();
+    this.editor.setText(userPrompt);
+    this.showPrompt("Removed last QA.");
+  }
+
+  private removeLastSessionQA(): void {
+    let assistantIndex = -1;
+    for (let i = this.sessionMessages.length - 1; i >= 0; i--) {
+      if (this.sessionMessages[i]?.role === "assistant") {
+        assistantIndex = i;
+        break;
+      }
+    }
+    if (assistantIndex < 0) return;
+
+    let userIndex = -1;
+    for (let i = assistantIndex - 1; i >= 0; i--) {
+      if (this.sessionMessages[i]?.role === "user") {
+        userIndex = i;
+        break;
+      }
+    }
+    if (userIndex < 0) return;
+    this.sessionMessages.splice(userIndex);
   }
 
   private showPrompt(message: string): void {
@@ -404,8 +472,26 @@ export class RJApp {
       this.sessionMessages = [];
       this.state.messageCount = 0;
       this.state.commandCount = 0;
-      this.updateContextUsage();
+      this.resetContextUsage();
       if (action.messages?.[0]) this.showPrompt(action.messages[0]);
+      this.requestRender();
+      return;
+    }
+
+    if (action.type === "undo") {
+      if (this.runningAI && this.activeQA) {
+        const activeQA = this.activeQA;
+        this.pendingUndoPrompt = activeQA.promptText;
+        const userIndex = this.messages.indexOf(activeQA.user);
+        if (userIndex >= 0) this.messages.splice(userIndex, activeQA.assistant ? 2 : 1);
+        this.sessionMessages.splice(activeQA.sessionStartIndex);
+        this.state.messageCount = Math.max(0, this.state.messageCount - 1);
+        this.activeAIAbort?.abort();
+        this.showPrompt("Removed last QA.");
+        this.updateContextUsage();
+      } else {
+        this.undoLastQA();
+      }
       this.requestRender();
       return;
     }

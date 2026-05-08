@@ -21,6 +21,7 @@ export type CommandAction =
   | { type: "system-messages"; messages: string[] }
   | { type: "show-model-selector"; search: string }
   | { type: "clear"; messages?: string[] }
+  | { type: "undo" }
   | { type: "quit" };
 
 /** 斜杠命令定义 */
@@ -53,6 +54,12 @@ const commandList: SlashCommand[] = [
     usage: "/clear",
     description: "Start a new empty chat.",
     handler: () => ({ type: "clear", messages: ["Started a new chat."] }),
+  },
+  {
+    name: "/undo",
+    usage: "/undo",
+    description: "Remove the last QA and restore its prompt.",
+    handler: () => ({ type: "undo" }),
   },
   {
     name: "/quit",

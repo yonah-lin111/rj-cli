@@ -53,6 +53,7 @@ export interface Message {
   label?: string;
   thinking?: string;
   strikethrough?: boolean;
+  compact?: boolean;
   /** assistant 消息的多轮段落（有此字段时忽略 text/thinking） */
   segments?: AssistantSegment[];
 }
@@ -154,6 +155,11 @@ const applyMessageStyle = (lines: string[], message: Message): string[] => {
   return lines.map((line) => theme.dim(theme.strikethrough(line)));
 };
 
+const limitLines = (lines: string[], maxLines: number): string[] => {
+  if (lines.length <= maxLines) return lines;
+  return [...lines.slice(0, maxLines - 1), `${lines[maxLines - 1]}...`];
+};
+
 /**
  * 将消息格式化为终端渲染行数组。
  * assistant 消息额外支持思考内容展示。
@@ -163,11 +169,12 @@ export const formatMessage = (message: Message, width = 80): string[] => {
   const contentWidth = Math.max(20, width - 2);
 
   if (message.kind !== "assistant") {
+    const lines = [
+      header,
+      ...renderMarkdown(message.text, contentWidth, textStyles[message.kind]),
+    ];
     return applyMessageStyle(
-      [
-        header,
-        ...renderMarkdown(message.text, contentWidth, textStyles[message.kind]),
-      ],
+      message.compact ? limitLines(lines, 3) : lines,
       message,
     );
   }
@@ -193,7 +200,7 @@ export const formatMessage = (message: Message, width = 80): string[] => {
     if (message.text.trim())
       lines.push(...renderMarkdown(message.text.trimEnd(), contentWidth, {}));
   }
-  return applyMessageStyle(lines, message);
+  return applyMessageStyle(message.compact ? limitLines(lines, 3) : lines, message);
 };
 
 /** 消息列表视图组件，最多渲染最近 maxRendered 条消息 */
