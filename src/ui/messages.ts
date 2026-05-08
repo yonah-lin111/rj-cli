@@ -100,10 +100,6 @@ const renderMarkdown = (
 
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
-  if (entry.name === "todowrite" && entry.status === "completed" && entry.displayText) {
-    return renderMarkdown(entry.displayText, 80, {});
-  }
-
   let indicator: string;
   if (entry.name === "bash") {
     indicator = theme.success("*");
@@ -128,25 +124,62 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
   return lines;
 };
 
+const renderThinking = (thinking: string, width: number): string[] => {
+  const lines = [theme.thinkingLabel("thinking:")];
+  lines.push(...renderMarkdown(thinking.trim(), width, { color: theme.thinkingText }));
+  return lines;
+};
+
+const renderTodoList = (entry: ToolCallEntry, width: number): string[] => {
+  if (!entry.displayText) return [];
+  const frame = SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length];
+  return renderMarkdown(entry.displayText, width, {}).map((line) =>
+    line.replace("[loading]", `[${theme.accent(frame!)}]`),
+  );
+};
+
+const latestTodoEntry = (segments: AssistantSegment[]): ToolCallEntry | undefined => {
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const toolCalls = segments[i]?.toolCalls;
+    if (!toolCalls?.length) continue;
+    for (let j = toolCalls.length - 1; j >= 0; j--) {
+      const entry = toolCalls[j];
+      if (entry?.name === "todowrite" && entry.displayText) return entry;
+    }
+  }
+  return undefined;
+};
+
+const todoStatusTextPattern = /^(让我|我来|现在)?(来)?(创建|更新|调整|标记|记录)(一个|一下)?\s*(任务|todo|Todo|待办)(列表)?(来)?(确认这个情况|确认|记录|更新)?(状态)?[：:]?$/;
+
+const filterTodoStatusLines = (text: string, hasTodoWrite: boolean): string => {
+  if (!hasTodoWrite) return text;
+  return text
+    .split("\n")
+    .filter((line) => !todoStatusTextPattern.test(line.trim()))
+    .join("\n")
+    .trim();
+};
+
 /** 渲染 assistant 消息的一个段落 */
 const renderSegment = (
   seg: AssistantSegment,
   contentWidth: number,
 ): string[] => {
   const lines: string[] = [];
+  const hasTodoWrite = seg.toolCalls?.some((entry) => entry.name === "todowrite") ?? false;
+  const text = filterTodoStatusLines(seg.text, hasTodoWrite);
   if (seg.thinking?.trim()) {
-    const thinkingText = seg.thinking.trim().replace(/\n/g, " ");
-    lines.push(
-      `${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`,
-    );
-    if (seg.text.trim() || seg.toolCalls?.length) lines.push("");
+    lines.push(...renderThinking(seg.thinking, contentWidth));
+    if (text.trim() || seg.toolCalls?.length) lines.push("");
   }
-  if (seg.text.trim()) {
-    lines.push(...renderMarkdown(seg.text.trimEnd(), contentWidth, {}));
+  if (text.trim()) {
+    lines.push(...renderMarkdown(text.trimEnd(), contentWidth, {}));
   }
   if (seg.toolCalls?.length) {
-    if (seg.text.trim()) lines.push("");
+    if (text.trim()) lines.push("");
     for (const entry of seg.toolCalls) {
+      if (entry.name === "todowrite") continue;
       lines.push(...renderToolCall(entry));
     }
   }
@@ -194,13 +227,15 @@ export const formatMessage = (message: Message, width = 80): string[] => {
         lines.push(...segLines);
       }
     }
+    const todoEntry = latestTodoEntry(message.segments);
+    if (todoEntry?.displayText) {
+      if (lines.length > 1) lines.push("");
+      lines.push(...renderTodoList(todoEntry, contentWidth));
+    }
   } else {
     // 兼容无 segments 的旧格式
     if (message.thinking?.trim()) {
-      const thinkingText = message.thinking.trim().replace(/\n/g, " ");
-      lines.push(
-        `${theme.thinkingLabel("thinking:")} ${theme.thinkingText(thinkingText)}`,
-      );
+      lines.push(...renderThinking(message.thinking, contentWidth));
       if (message.text.trim()) lines.push("");
     }
     if (message.text.trim())

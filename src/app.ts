@@ -32,6 +32,7 @@ export class RJApp {
   private chat = new Container();
   private status = new Container();
   private loadingAnimation?: Loader;
+  private todoLoadingTimer?: NodeJS.Timeout;
   private modelSelector?: ModelSelector;
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
@@ -291,6 +292,7 @@ export class RJApp {
                 resultText = result.content;
                 entry.displayText = result.displayText;
                 entry.resultText = resultText;
+                this.syncTodoLoadingAnimation(assistant);
               } else {
                 resultText = `Unknown tool: ${call.name}`;
                 isError = true;
@@ -336,6 +338,7 @@ export class RJApp {
         this.editor.setText(this.pendingUndoPrompt);
         this.pendingUndoPrompt = undefined;
       }
+      this.stopTodoLoadingAnimation();
       this.stopLoading();
       this.requestRender();
     }
@@ -556,6 +559,35 @@ export class RJApp {
       this.stopLoading();
       this.requestRender();
     }
+  }
+
+  private syncTodoLoadingAnimation(message?: Message): void {
+    const hasInProgressTodo = message?.segments?.some((segment) =>
+      segment.toolCalls?.some((entry) => entry.name === "todowrite" && entry.displayText?.includes("[loading]")),
+    ) ?? false;
+
+    if (!hasInProgressTodo) {
+      this.stopTodoLoadingAnimation();
+      return;
+    }
+    if (this.todoLoadingTimer) return;
+
+    this.todoLoadingTimer = setInterval(() => {
+      for (const segment of message?.segments ?? []) {
+        for (const entry of segment.toolCalls ?? []) {
+          if (entry.name === "todowrite" && entry.displayText?.includes("[loading]")) {
+            entry.spinnerFrame = ((entry.spinnerFrame ?? 0) + 1) % 10;
+          }
+        }
+      }
+      this.requestRender();
+    }, 80);
+  }
+
+  private stopTodoLoadingAnimation(): void {
+    if (!this.todoLoadingTimer) return;
+    clearInterval(this.todoLoadingTimer);
+    this.todoLoadingTimer = undefined;
   }
 
   private startLoading(message: string, spinnerColor: (text: string) => string = theme.accent): void {
