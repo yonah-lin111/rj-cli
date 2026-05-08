@@ -124,11 +124,8 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
   return lines;
 };
 
-const renderThinking = (thinking: string, width: number): string[] => {
-  const lines = [theme.thinkingLabel("thinking:")];
-  lines.push(...renderMarkdown(thinking.trim(), width, { color: theme.thinkingText }));
-  return lines;
-};
+const renderThinking = (thinking: string, width: number): string[] =>
+  renderMarkdown(thinking.trim(), width, { color: theme.thinkingText });
 
 const renderTodoList = (entry: ToolCallEntry, width: number): string[] => {
   if (!entry.displayText) return [];
