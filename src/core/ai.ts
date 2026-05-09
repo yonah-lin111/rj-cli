@@ -355,6 +355,93 @@ export const todoWriteToolSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+/** rj_get_ranking tool 的 OpenAI schema */
+export const rjGetRankingSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_get_ranking",
+    description: "从 rj-web-server 获取 DLsite 排行榜数据，支持按时间段、RJ号、标题、社团、CV筛选。",
+    parameters: {
+      type: "object",
+      properties: {
+        ranking_type: {
+          type: "string",
+          enum: ["24h", "7d", "30d", "year"],
+          description: "排行榜时间段：24h/7d/30d/year。",
+        },
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        rj_code: { type: "string", description: "按 RJ 号筛选。" },
+        title: { type: "string", description: "按标题模糊查询。" },
+        circle: { type: "string", description: "按社团名模糊查询。" },
+        cv: { type: "string", description: "按 CV 声优模糊查询。" },
+      },
+      required: ["ranking_type"],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** rj_query tool 的 OpenAI schema */
+export const rjQuerySchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_query",
+    description: "查询本地数据库中已收录的 RJ 作品，支持多条件筛选和分页。",
+    parameters: {
+      type: "object",
+      properties: {
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        rj_code: { type: "string", description: "按 RJ 号筛选。" },
+        title: { type: "string", description: "按标题模糊查询。" },
+        circle: { type: "string", description: "按社团名模糊查询。" },
+        cv: { type: "string", description: "按 CV 声优模糊查询。" },
+        source: { type: "string", description: "按资源来源筛选。" },
+        status: { type: "number", description: "按下载状态筛选。" },
+        release_date_start: { type: "string", description: "发售开始日期（YYYY-MM-DD）。" },
+        release_date_end: { type: "string", description: "发售结束日期（YYYY-MM-DD）。" },
+        created_at_start: { type: "string", description: "添加开始日期（YYYY-MM-DD）。" },
+        created_at_end: { type: "string", description: "添加结束日期（YYYY-MM-DD）。" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** rj_get_detail tool 的 OpenAI schema */
+export const rjGetDetailSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_get_detail",
+    description: "获取本地数据库中指定 RJ 号的作品详情。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+      },
+      required: ["rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** rj_get_overview tool 的 OpenAI schema */
+export const rjGetOverviewSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_get_overview",
+    description: "获取 rj-web-server 数据概览看板，包含作品总数、状态分布等统计信息。",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** bash tool 的 OpenAI schema */
 export const bashToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",

@@ -5,7 +5,8 @@ import {
 import { runBash, runBashTool } from "./tools/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/file-writer.ts";
 import { todoWriteTool } from "./tools/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema } from "./core/ai.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema } from "./core/ai.ts";
+import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool } from "./tools/rj-server/index.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
   saveDefaultModel, savePromptHistory,
@@ -201,7 +202,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -250,6 +251,10 @@ export class RJApp {
             else if (call.name === "edit_file") callLabel = `Edit ${path}`;
             else if (call.name === "bash") callLabel = `Bash ${command}`;
             else if (call.name === "todowrite") callLabel = "Update todos";
+            else if (call.name === "rj_get_ranking") callLabel = `Ranking ${args.ranking_type ?? ""}`;
+            else if (call.name === "rj_query") callLabel = "Query RJ";
+            else if (call.name === "rj_get_detail") callLabel = `Detail ${args.rj_code ?? ""}`;
+            else if (call.name === "rj_get_overview") callLabel = "RJ Overview";
 
             entry = { id: call.id, name: call.name, status: "running", callLabel, spinnerFrame: 0 };
             if (currentSegment) {
@@ -293,6 +298,30 @@ export class RJApp {
                 entry.displayText = result.displayText;
                 entry.resultText = resultText;
                 this.syncTodoLoadingAnimation(assistant);
+              } else if (call.name === "rj_get_ranking") {
+                const result = await getRankingTool(args as unknown as Parameters<typeof getRankingTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rj_query") {
+                const result = queryRjTool(args as Parameters<typeof queryRjTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rj_get_detail") {
+                const result = getRjDetailTool(args as unknown as Parameters<typeof getRjDetailTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rj_get_overview") {
+                const result = getOverviewTool();
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
               } else {
                 resultText = `Unknown tool: ${call.name}`;
                 isError = true;
