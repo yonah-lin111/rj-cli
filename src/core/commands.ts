@@ -20,6 +20,7 @@ export type CommandAction =
   | { type: "messages"; messages: string[] }
   | { type: "system-messages"; messages: string[] }
   | { type: "show-model-selector"; search: string }
+  | { type: "show-session-selector" }
   | { type: "clear"; messages?: string[] }
   | { type: "undo" }
   | { type: "quit" };
@@ -60,6 +61,12 @@ const commandList: SlashCommand[] = [
     usage: "/undo",
     description: "Remove the last QA and restore its prompt.",
     handler: () => ({ type: "undo" }),
+  },
+  {
+    name: "/session",
+    usage: "/session",
+    description: "Browse and restore chat history.",
+    handler: () => ({ type: "show-session-selector" }),
   },
   {
     name: "/quit",

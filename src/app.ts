@@ -16,11 +16,13 @@ import { executeSlashCommand, getCommands, helpText, type AppCommandContext } fr
 import { Footer } from "./ui/footer.ts";
 import { headerText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
+import { SessionSelector } from "./ui/session-selector.ts";
 import { MessagesView, type Message, type AssistantSegment, type ToolCallEntry } from "./ui/messages.ts";
 import { editorTheme, theme } from "./ui/theme.ts";
 import { expandAtMentions } from "./tools/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
 import { buildSystemPrompt } from "./prompts/system.ts";
+import { generateSessionId, saveSession, loadSession, listSessions, type SessionRecord } from "./core/session.ts";
 
 
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
@@ -35,6 +37,8 @@ export class RJApp {
   private loadingAnimation?: Loader;
   private todoLoadingTimer?: NodeJS.Timeout;
   private modelSelector?: ModelSelector;
+  private sessionSelector?: SessionSelector;
+  private currentSessionId: string = generateSessionId();
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
   private sessionMessages: ChatHistoryMessage[] = [];
@@ -369,6 +373,7 @@ export class RJApp {
       }
       this.stopTodoLoadingAnimation();
       this.stopLoading();
+      this.persistSession();
       this.requestRender();
     }
   }
@@ -507,8 +512,10 @@ export class RJApp {
     }
 
     if (action.type === "clear") {
+      this.persistSession();
       this.messages = [];
       this.sessionMessages = [];
+      this.currentSessionId = generateSessionId();
       this.state.messageCount = 0;
       this.state.commandCount = 0;
       this.resetContextUsage();
@@ -531,6 +538,12 @@ export class RJApp {
       } else {
         this.undoLastQA();
       }
+      this.requestRender();
+      return;
+    }
+
+    if (action.type === "show-session-selector") {
+      this.showSessionSelector();
       this.requestRender();
       return;
     }
@@ -661,6 +674,49 @@ export class RJApp {
     this.tui.setFocus(this.editor);
   }
 
+  private showSessionSelector(): void {
+    const sessions = listSessions();
+    if (sessions.length === 0) {
+      this.showPrompt("No saved sessions yet.");
+      return;
+    }
+    const selector = new SessionSelector(
+      sessions,
+      (session: SessionRecord) => {
+        this.closeSessionSelector();
+        this.loadSessionRecord(session);
+        this.showPrompt(`Loaded: ${session.title}`);
+        this.requestRender();
+      },
+      () => {
+        this.closeSessionSelector();
+        this.requestRender();
+      },
+    );
+    this.sessionSelector = selector;
+    this.refreshChat();
+    this.tui.setFocus(selector);
+  }
+
+  private closeSessionSelector(): void {
+    this.sessionSelector = undefined;
+    this.tui.setFocus(this.editor);
+  }
+
+  private loadSessionRecord(session: SessionRecord): void {
+    this.persistSession();
+    this.messages = session.uiMessages;
+    this.sessionMessages = session.sessionMessages;
+    this.currentSessionId = session.id;
+    this.state.messageCount = this.messages.filter((m) => m.kind === "user" || m.kind === "assistant").length;
+    this.updateContextUsage();
+  }
+
+  private persistSession(): void {
+    if (this.sessionMessages.length === 0) return;
+    saveSession(this.currentSessionId, this.sessionMessages, this.messages, this.state.startedAt);
+  }
+
   private setModel(modelId: string): void {
     const provider = getProvider(this.config, this.state.provider);
     const model = getModel(provider, modelId);
@@ -686,6 +742,10 @@ export class RJApp {
     if (this.modelSelector) {
       this.chat.addChild(new Spacer(1));
       this.chat.addChild(this.modelSelector);
+    }
+    if (this.sessionSelector) {
+      this.chat.addChild(new Spacer(1));
+      this.chat.addChild(this.sessionSelector);
     }
   }
 
