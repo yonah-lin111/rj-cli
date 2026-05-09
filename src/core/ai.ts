@@ -360,7 +360,7 @@ export const rjGetRankingSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",
   function: {
     name: "rj_get_ranking",
-    description: "从 rj-web-server 获取 DLsite 排行榜数据，支持按时间段、RJ号、标题、社团、CV筛选。",
+    description: "获取 DLsite 排行榜数据，支持按时间段、RJ号、标题、社团、CV筛选。",
     parameters: {
       type: "object",
       properties: {
@@ -432,7 +432,7 @@ export const rjGetOverviewSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",
   function: {
     name: "rj_get_overview",
-    description: "获取 rj-web-server 数据概览看板，包含作品总数、状态分布等统计信息。",
+    description: "获取数据概览看板，包含作品总数、状态分布等统计信息。",
     parameters: {
       type: "object",
       properties: {},
