@@ -101,21 +101,31 @@ const renderMarkdown = (
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
   let indicator: string;
-  if (entry.name === "bash") {
+  if (entry.name === "ask") {
+    if (entry.status === "running") {
+      indicator = theme.askIndicator("Q");
+    } else if (entry.status === "completed") {
+      indicator = theme.askIndicator("Q");
+    } else {
+      indicator = theme.error("Q");
+    }
+  } else if (entry.name === "read_file") {
+    indicator = entry.status === "error" ? theme.error("→") : theme.fileArrow("→");
+  } else if (entry.name === "write_file" || entry.name === "edit_file") {
+    indicator = entry.status === "error" ? theme.error("←") : theme.fileArrow("←");
+  } else if (entry.name === "bash") {
     indicator = theme.success("*");
   } else if (entry.status === "running") {
-    const frame =
-      SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length];
-    indicator = theme.accent(frame!);
+    indicator = theme.dim("·");
   } else if (entry.status === "completed") {
-    indicator = theme.success("✓");
+    indicator = theme.dim("·");
   } else {
     indicator = theme.error("✗");
   }
   const label =
-    entry.status === "error"
-      ? theme.error(entry.callLabel)
-      : theme.dim(entry.callLabel);
+    entry.name === "ask"
+      ? (entry.status === "error" ? theme.error(entry.callLabel) : theme.askLabel(entry.callLabel))
+      : (entry.status === "error" ? theme.error(entry.callLabel) : theme.dim(entry.callLabel));
   const resultLabel =
     entry.status !== "running" && entry.resultLabel
       ? ` ${theme.dim("—")} ${entry.status === "error" ? theme.error(entry.resultLabel) : theme.dim(entry.resultLabel)}`
@@ -179,6 +189,11 @@ const renderSegment = (
     for (const entry of seg.toolCalls) {
       if (entry.name === "todowrite") continue;
       lines.push(...renderToolCall(entry));
+      if (entry.name === "ask" && entry.displayText && entry.status === "completed") {
+        for (const line of entry.displayText.split("\n")) {
+          lines.push(theme.dim(`  ${line}`));
+        }
+      }
     }
   }
   return lines;

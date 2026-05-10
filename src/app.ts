@@ -5,7 +5,7 @@ import {
 import { runBash, runBashTool } from "./tools/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/file-writer.ts";
 import { todoWriteTool } from "./tools/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema } from "./core/ai.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema } from "./core/ai.ts";
 import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool } from "./tools/rj-server/index.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
@@ -17,6 +17,8 @@ import { Footer } from "./ui/footer.ts";
 import { headerText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
+import { AskPrompt } from "./ui/ask-prompt.ts";
+import { createAskId, registerAskPending, resolveAsk, rejectAsk, formatAskResult, type AskQuestion } from "./tools/ask.ts";
 import { MessagesView, type Message, type AssistantSegment, type ToolCallEntry } from "./ui/messages.ts";
 import { editorTheme, theme } from "./ui/theme.ts";
 import { expandAtMentions } from "./tools/file-reader.ts";
@@ -38,6 +40,7 @@ export class RJApp {
   private todoLoadingTimer?: NodeJS.Timeout;
   private modelSelector?: ModelSelector;
   private sessionSelector?: SessionSelector;
+  private askPrompt?: AskPrompt;
   private currentSessionId: string = generateSessionId();
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
@@ -117,10 +120,11 @@ export class RJApp {
         return { consume: true };
       }
       if (!matchesKey(data, "escape")) return;
-      const now = Date.now();
-      const isDoubleEscape = now - this.lastEscapeAt <= 500;
-      this.lastEscapeAt = now;
-      if (!isDoubleEscape || !this.runningAI) return;
+      if (this.askPrompt) {
+        this.askPrompt.handleInput(data);
+        return { consume: true };
+      }
+      if (!this.runningAI) return;
       this.cancelAIResponse();
       return { consume: true };
     });
@@ -206,7 +210,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -326,6 +330,29 @@ export class RJApp {
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;
                 entry.resultText = resultText;
+              } else if (call.name === "ask") {
+                const questions = args.questions as AskQuestion[];
+                entry.resultLabel = `Asking ${questions.length} question${questions.length > 1 ? "s" : ""}...`;
+                clearInterval(spinnerTimer);
+                this.requestRender();
+                try {
+                  const answers = await new Promise<string[][]>((resolve, reject) => {
+                    const id = createAskId();
+                    registerAskPending(id, resolve, reject);
+                    this.showAskPrompt(id, questions);
+                  });
+                  const result = formatAskResult(questions, answers);
+                  resultText = result.content;
+                  entry.resultLabel = result.resultLabel;
+                  entry.resultText = resultText;
+                  entry.displayText = answers
+                    .map((ans, i) => `${questions[i]?.header ?? ""}: ${ans.join(", ")}`)
+                    .join("\n");
+                } catch {
+                  resultText = "The user dismissed this question.";
+                  isError = true;
+                  setToolEntry("error", resultText, true);
+                }
               } else {
                 resultText = `Unknown tool: ${call.name}`;
                 isError = true;
@@ -703,6 +730,30 @@ export class RJApp {
     this.tui.setFocus(this.editor);
   }
 
+  private showAskPrompt(id: string, questions: AskQuestion[]): void {
+    const prompt = new AskPrompt(
+      questions,
+      (answers) => {
+        this.closeAskPrompt();
+        resolveAsk(id, answers);
+        this.requestRender();
+      },
+      () => {
+        this.closeAskPrompt();
+        rejectAsk(id);
+        this.requestRender();
+      },
+    );
+    this.askPrompt = prompt;
+    this.refreshChat();
+    this.tui.setFocus(prompt);
+  }
+
+  private closeAskPrompt(): void {
+    this.askPrompt = undefined;
+    this.tui.setFocus(this.editor);
+  }
+
   private loadSessionRecord(session: SessionRecord): void {
     this.persistSession();
     this.messages = session.uiMessages;
@@ -746,6 +797,10 @@ export class RJApp {
     if (this.sessionSelector) {
       this.chat.addChild(new Spacer(1));
       this.chat.addChild(this.sessionSelector);
+    }
+    if (this.askPrompt) {
+      this.chat.addChild(new Spacer(1));
+      this.chat.addChild(this.askPrompt);
     }
   }
 

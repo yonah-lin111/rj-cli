@@ -442,6 +442,63 @@ export const rjGetOverviewSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+/** ask tool 的 OpenAI schema */
+export const askToolSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "ask",
+    description:
+      "Ask the user one or more questions during execution. Use to gather preferences, clarify ambiguous instructions, or get decisions on implementation choices. Each question has a list of options; the user can select one (or multiple if multiple=true) or type a custom answer.",
+    parameters: {
+      type: "object",
+      properties: {
+        questions: {
+          type: "array",
+          description: "Questions to ask the user.",
+          items: {
+            type: "object",
+            properties: {
+              question: {
+                type: "string",
+                description: "The complete question to ask. Should be clear and end with a question mark.",
+              },
+              header: {
+                type: "string",
+                description: "Very short label shown as the question title (max 30 chars).",
+              },
+              options: {
+                type: "array",
+                description: "Available choices for the user.",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: { type: "string", description: "Display text (1-5 words, concise)." },
+                    description: { type: "string", description: "Explanation of this choice." },
+                  },
+                  required: ["label", "description"],
+                  additionalProperties: false,
+                },
+              },
+              multiple: {
+                type: "boolean",
+                description: "Allow selecting multiple choices. Default false.",
+              },
+              custom: {
+                type: "boolean",
+                description: "Allow typing a custom answer. Default true. When enabled, do not include an 'Other' option.",
+              },
+            },
+            required: ["question", "header", "options"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["questions"],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** bash tool 的 OpenAI schema */
 export const bashToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",
