@@ -100,6 +100,15 @@ const renderMarkdown = (
 ): string[] =>
   new Markdown(text.trimEnd(), 0, 0, markdownTheme, style).render(width);
 
+/** 渲染 diff 字符串为带颜色的行数组 */
+const renderDiff = (diff: string): string[] =>
+  diff.split("\n").map((line) => {
+    if (line.startsWith("+")) return `  ${theme.diffAdd(line)}`;
+    if (line.startsWith("-")) return `  ${theme.diffRemove(line)}`;
+    if (line.startsWith("@@")) return `  ${theme.muted(line)}`;
+    return `  ${theme.diffContext(line)}`;
+  });
+
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
   // explore subagent 特殊渲染格式
@@ -147,6 +156,9 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
       ? ` ${theme.dim("—")} ${entry.status === "error" ? theme.error(entry.resultLabel) : theme.dim(entry.resultLabel)}`
       : "";
   const lines = [`${indicator} ${label}${resultLabel}`];
+  if ((entry.name === "write_file" || entry.name === "edit_file") && entry.displayText && entry.status !== "running") {
+    lines.push(...renderDiff(entry.displayText));
+  }
   return lines;
 };
 

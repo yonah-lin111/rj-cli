@@ -24,7 +24,7 @@ import { editorTheme, theme } from "./ui/theme.ts";
 import { expandAtMentions } from "./tools/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
 import { buildSystemPrompt } from "./prompts/system.ts";
-import { generateSessionId, saveSession, loadSession, listSessions, type SessionRecord } from "./core/session.ts";
+import { generateSessionId, saveSession, loadSession, listSessions, generateSessionTitle, type SessionRecord } from "./core/session.ts";
 import { SubagentView, createSubagentSnapshot, type SubagentSnapshot } from "./ui/subagent-view.ts";
 import { runSubagent } from "./subagent/runner.ts";
 import type { RJSubagentConfig } from "./core/config.ts";
@@ -50,6 +50,7 @@ export class RJApp {
   /** 当前 ctrl+o 打开的 subagentId */
   private openSubagentId?: string;
   private currentSessionId: string = generateSessionId();
+  private currentSessionTitle?: string;
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
   private sessionMessages: ChatHistoryMessage[] = [];
@@ -134,6 +135,12 @@ export class RJApp {
         return { consume: true };
       }
 
+      if (this.sessionSelector) {
+        this.sessionSelector.handleInput(data);
+        this.requestRender();
+        return { consume: true };
+      }
+
       if (!matchesKey(data, "escape")) return;
       if (this.askPrompt) {
         this.askPrompt.handleInput(data);
@@ -200,6 +207,7 @@ export class RJApp {
       this.addMessage("warning", warning, "warning");
     }
 
+    const isFirstMessage = this.sessionMessages.length === 0;
     this.runningAI = true;
     const user = this.addMessage("user", text, "user");
     if (expanded !== text) user.expandedText = expanded;
@@ -311,11 +319,13 @@ export class RJApp {
                 resultText = result.created ? `Created ${path}` : `Overwrote ${path}`;
                 entry.resultLabel = resultText;
                 entry.resultText = resultText;
+                if (result.diff) entry.displayText = result.diff;
               } else if (call.name === "edit_file") {
-                await editFileTool(path, args.edits as FileEdit[], this.state.cwd);
+                const result = await editFileTool(path, args.edits as FileEdit[], this.state.cwd);
                 resultText = `Patched ${path}`;
                 entry.resultLabel = resultText;
                 entry.resultText = resultText;
+                if (result.diff) entry.displayText = result.diff;
               } else if (call.name === "bash") {
                 const result = await runBashTool(command, this.state.cwd);
                 resultText = result.content;
@@ -444,6 +454,15 @@ export class RJApp {
       this.stopLoading();
       this.persistSession();
       this.requestRender();
+    }
+
+    if (isFirstMessage && !this.currentSessionTitle && !abortController.signal.aborted) {
+      void generateSessionTitle(provider, model.id, text).then((title) => {
+        if (title && !this.currentSessionTitle) {
+          this.currentSessionTitle = title;
+          this.persistSession();
+        }
+      });
     }
   }
 
@@ -585,6 +604,7 @@ export class RJApp {
       this.messages = [];
       this.sessionMessages = [];
       this.currentSessionId = generateSessionId();
+      this.currentSessionTitle = undefined;
       this.state.messageCount = 0;
       this.state.commandCount = 0;
       this.resetContextUsage();
@@ -744,7 +764,7 @@ export class RJApp {
   }
 
   private showSessionSelector(): void {
-    const sessions = listSessions();
+    const sessions = listSessions().filter((s) => s.id !== this.currentSessionId);
     if (sessions.length === 0) {
       this.showPrompt("No saved sessions yet.");
       return;
@@ -978,13 +998,14 @@ export class RJApp {
     this.messages = session.uiMessages;
     this.sessionMessages = session.sessionMessages;
     this.currentSessionId = session.id;
+    this.currentSessionTitle = session.title;
     this.state.messageCount = this.messages.filter((m) => m.kind === "user" || m.kind === "assistant").length;
     this.updateContextUsage();
   }
 
   private persistSession(): void {
     if (this.sessionMessages.length === 0) return;
-    saveSession(this.currentSessionId, this.sessionMessages, this.messages, this.state.startedAt);
+    saveSession(this.currentSessionId, this.sessionMessages, this.messages, this.state.startedAt, this.currentSessionTitle);
   }
 
   private setModel(modelId: string): void {
@@ -1008,18 +1029,16 @@ export class RJApp {
 
   private refreshChat(): void {
     this.chat.clear();
-    this.chat.addChild(new MessagesView(() => this.messages));
     if (this.modelSelector) {
-      this.chat.addChild(new Spacer(1));
       this.chat.addChild(this.modelSelector);
-    }
-    if (this.sessionSelector) {
-      this.chat.addChild(new Spacer(1));
+    } else if (this.sessionSelector) {
       this.chat.addChild(this.sessionSelector);
-    }
-    if (this.askPrompt) {
-      this.chat.addChild(new Spacer(1));
-      this.chat.addChild(this.askPrompt);
+    } else {
+      this.chat.addChild(new MessagesView(() => this.messages));
+      if (this.askPrompt) {
+        this.chat.addChild(new Spacer(1));
+        this.chat.addChild(this.askPrompt);
+      }
     }
   }
 

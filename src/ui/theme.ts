@@ -24,6 +24,9 @@ export const theme = {
   systemPrompt: chalk.hex("#fef3c7").italic,
   strikethrough: chalk.strikethrough,
   bold: chalk.bold,
+  diffAdd: chalk.hex("#86efac"),
+  diffRemove: chalk.hex("#fca5a5"),
+  diffContext: chalk.hex("#64748b"),
 };
 
 /** Markdown 渲染主题 */

@@ -1,7 +1,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import OpenAI from "openai";
 import type { ChatHistoryMessage } from "./ai.ts";
+import type { RJProviderConfig } from "./config.ts";
 import type { Message } from "../ui/messages.ts";
 
 /** 单个会话的持久化结构 */
@@ -39,18 +41,45 @@ export const saveSession = (
   sessionMessages: ChatHistoryMessage[],
   uiMessages: Message[],
   createdAt: Date,
+  title?: string,
 ): void => {
   ensureDir();
   const existing = loadSession(id);
   const record: SessionRecord = {
     id,
-    title: extractTitle(uiMessages),
+    title: title ?? existing?.title ?? extractTitle(uiMessages),
     createdAt: existing?.createdAt ?? createdAt.toISOString(),
     updatedAt: new Date().toISOString(),
     sessionMessages,
     uiMessages,
   };
   writeFileSync(sessionPath(id), `${JSON.stringify(record, null, 2)}\n`, "utf8");
+};
+
+/** 用 AI 为会话生成简短标题（最多10个字），失败时返回 null */
+export const generateSessionTitle = async (
+  provider: RJProviderConfig,
+  model: string,
+  userText: string,
+): Promise<string | null> => {
+  if (!provider.baseURL || !provider.apiKey) return null;
+  try {
+    const client = new OpenAI({ baseURL: provider.baseURL, apiKey: provider.apiKey });
+    const response = await client.chat.completions.create({
+      model,
+      max_tokens: 30,
+      messages: [
+        {
+          role: "user",
+          content: `为以下对话内容生成一个简短标题，要求：10个字以内，不加引号，不加标点，直接输出标题文字。\n\n对话内容：${userText.slice(0, 200)}`,
+        },
+      ],
+    });
+    const title = response.choices[0]?.message?.content?.trim();
+    return title || null;
+  } catch {
+    return null;
+  }
 };
 
 /** 从磁盘加载单个会话，不存在或解析失败返回 null */

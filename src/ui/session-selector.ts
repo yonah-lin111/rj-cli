@@ -11,6 +11,8 @@ export class SessionSelector extends Container implements Focusable {
   private search = new Input();
   private list: SelectList;
   private details = new Text();
+  private items: (SelectItem & { session: SessionRecord })[];
+  private lastNavTime = 0;
 
   focused = false;
 
@@ -21,7 +23,7 @@ export class SessionSelector extends Container implements Focusable {
   ) {
     super();
 
-    const items: (SelectItem & { session: SessionRecord })[] = sessions.map((s) => ({
+    this.items = sessions.map((s) => ({
       value: s.id,
       label: s.title,
       description: formatDate(s.updatedAt),
@@ -29,7 +31,7 @@ export class SessionSelector extends Container implements Focusable {
     }));
 
     this.list = new SelectList(
-      items,
+      this.items,
       10,
       editorTheme.selectList,
       { minPrimaryColumnWidth: 32, maxPrimaryColumnWidth: 48 },
@@ -37,13 +39,13 @@ export class SessionSelector extends Container implements Focusable {
 
     this.search.onSubmit = () => this.selectCurrent();
     this.list.onSelect = (item) => {
-      const found = items.find((i) => i.value === item.value);
+      const found = this.items.find((i) => i.value === item.value);
       if (found) onSelect(found.session);
     };
     this.list.onCancel = onCancel;
     this.list.onSelectionChange = (item) => this.updateDetails(item);
 
-    if (items.length > 0) this.list.setSelectedIndex(0);
+    if (this.items.length > 0) this.list.setSelectedIndex(0);
     this.updateDetails(this.list.getSelectedItem());
 
     this.addChild(new Text(theme.bold("Select session"), 1, 0));
@@ -58,9 +60,15 @@ export class SessionSelector extends Container implements Focusable {
 
   handleInput(keyData: string): void {
     const kb = getKeybindings();
+    const isNav = kb.matches(keyData, "tui.select.up") || kb.matches(keyData, "tui.select.down");
+    if (isNav) {
+      const now = Date.now();
+      if (now - this.lastNavTime < 120) return;
+      this.lastNavTime = now;
+      this.list.handleInput(keyData);
+      return;
+    }
     if (
-      kb.matches(keyData, "tui.select.up") ||
-      kb.matches(keyData, "tui.select.down") ||
       kb.matches(keyData, "tui.select.confirm") ||
       kb.matches(keyData, "tui.select.cancel")
     ) {
@@ -68,7 +76,15 @@ export class SessionSelector extends Container implements Focusable {
       return;
     }
     this.search.handleInput(keyData);
-    this.list.setFilter(this.search.getValue());
+    const filter = this.search.getValue().toLowerCase();
+    const filtered = filter
+      ? this.items.filter((i) => i.label!.toLowerCase().includes(filter))
+      : this.items;
+    // SelectList.setFilter 按 value 过滤，这里需要按 label(title) 过滤，直接设置 filteredItems
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this.list as any).filteredItems = filtered;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this.list as any).selectedIndex = 0;
     this.updateDetails(this.list.getSelectedItem());
   }
 
