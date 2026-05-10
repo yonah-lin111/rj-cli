@@ -499,6 +499,27 @@ export const askToolSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+/** explore subagent tool 的 OpenAI schema */
+export const exploreToolSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "explore",
+    description:
+      "Delegate file exploration to a specialized subagent. Use when you need to read and analyze multiple files to understand code structure, find implementations, or gather context. The subagent will read files and return a summary.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: {
+          type: "string",
+          description: "Description of what to explore or find. Be specific about which files or patterns to look for.",
+        },
+      },
+      required: ["task"],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** bash tool 的 OpenAI schema */
 export const bashToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",

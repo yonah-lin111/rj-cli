@@ -5,7 +5,7 @@ import {
 import { runBash, runBashTool } from "./tools/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/file-writer.ts";
 import { todoWriteTool } from "./tools/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema } from "./core/ai.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema } from "./core/ai.ts";
 import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool } from "./tools/rj-server/index.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
@@ -25,6 +25,9 @@ import { expandAtMentions } from "./tools/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
 import { buildSystemPrompt } from "./prompts/system.ts";
 import { generateSessionId, saveSession, loadSession, listSessions, type SessionRecord } from "./core/session.ts";
+import { SubagentView, createSubagentSnapshot, type SubagentSnapshot } from "./ui/subagent-view.ts";
+import { runSubagent } from "./subagent/runner.ts";
+import type { RJSubagentConfig } from "./core/config.ts";
 
 
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
@@ -41,6 +44,11 @@ export class RJApp {
   private modelSelector?: ModelSelector;
   private sessionSelector?: SessionSelector;
   private askPrompt?: AskPrompt;
+  private subagentView?: SubagentView;
+  /** 所有 subagent 执行快照，按 subagentId 索引，用于 ctrl+o 重新打开 */
+  private subagentSnapshots = new Map<string, SubagentSnapshot>();
+  /** 当前 ctrl+o 打开的 subagentId */
+  private openSubagentId?: string;
   private currentSessionId: string = generateSessionId();
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1, autocompleteMaxVisible: 8 });
   private messages: Message[] = [];
@@ -119,9 +127,21 @@ export class RJApp {
         }
         return { consume: true };
       }
+
+      // ctrl+o 打开/关闭最近一个 subagent 详情
+      if (matchesKey(data, "ctrl+o")) {
+        this.toggleSubagentView();
+        return { consume: true };
+      }
+
       if (!matchesKey(data, "escape")) return;
       if (this.askPrompt) {
         this.askPrompt.handleInput(data);
+        return { consume: true };
+      }
+      if (this.subagentView) {
+        this.closeSubagentView();
+        this.requestRender();
         return { consume: true };
       }
       if (!this.runningAI) return;
@@ -188,9 +208,11 @@ export class RJApp {
 
     const provider = getProvider(this.config, this.state.provider);
     const model = getModel(provider, this.state.model);
+
     const sessionStartIndex = this.sessionMessages.length;
     const userHistoryMessage: ChatHistoryMessage = { role: "user", content: expanded };
     this.sessionMessages.push(userHistoryMessage);
+
     this.updateContextUsage();
     this.startLoading(`Working with ${model.id}...`);
     this.requestRender();
@@ -210,7 +232,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -330,6 +352,26 @@ export class RJApp {
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;
                 entry.resultText = resultText;
+              } else if (call.name === "explore") {
+                const task = typeof args.task === "string" ? args.task : "Explore files";
+                const exploreAgent = this.config.subagents.find((a) => a.id === "explore");
+                if (!exploreAgent) {
+                  resultText = "Explore agent not configured.";
+                  isError = true;
+                  setToolEntry("error", resultText, true);
+                } else {
+                  entry.callLabel = task.slice(0, 60);
+                  clearInterval(spinnerTimer);
+                  // 启动 explore 专用 spinner
+                  const exploreSpinner = setInterval(() => {
+                    entry.spinnerFrame = ((entry.spinnerFrame ?? 0) + 1) % 10;
+                    this.requestRender();
+                  }, 80);
+                  this.requestRender();
+                  const subagentResult = await this.runExploreSubagent(exploreAgent, task, entry);
+                  clearInterval(exploreSpinner);
+                  resultText = subagentResult;
+                }
               } else if (call.name === "ask") {
                 const questions = args.questions as AskQuestion[];
                 entry.resultLabel = `Asking ${questions.length} question${questions.length > 1 ? "s" : ""}...`;
@@ -751,6 +793,183 @@ export class RJApp {
 
   private closeAskPrompt(): void {
     this.askPrompt = undefined;
+    this.tui.setFocus(this.editor);
+  }
+
+  /**
+   * 由主 agent tool call 触发，运行 explore subagent。
+   * 结果通过 toolEntry 的 subagentId 关联，供 ctrl+o 打开详情。
+   */
+  private async runExploreSubagent(
+    agent: RJSubagentConfig,
+    task: string,
+    toolEntry: ToolCallEntry,
+  ): Promise<string> {
+    const snapshot = createSubagentSnapshot(agent, task.slice(0, 80));
+    const subagentId = `${agent.id}-${Date.now()}`;
+    this.subagentSnapshots.set(subagentId, snapshot);
+    toolEntry.subagentId = subagentId;
+
+    const provider = getProvider(this.config, this.state.provider);
+    const model = getModel(provider, this.state.model);
+
+    // 当前 subagent assistant 消息及其当前 segment（与主 agent 结构完全一致）
+    let subagentAssistant: Message | undefined;
+    let subagentSegment: AssistantSegment | undefined;
+    // 追踪每个 tool call entry，按 callId 索引
+    const pendingEntries = new Map<string, ToolCallEntry>();
+    const pendingSpinners = new Map<string, NodeJS.Timeout>();
+
+    const getView = (): SubagentView | undefined =>
+      this.openSubagentId === subagentId ? this.subagentView : undefined;
+
+    try {
+      const result = await runSubagent(
+        agent,
+        task,
+        provider,
+        model.id,
+        this.state.cwd,
+        {
+          onTurn: () => {
+            // 每轮新建一个 assistant 消息（或复用已有的），追加新 segment
+            if (!subagentAssistant) {
+              subagentAssistant = { kind: "assistant", text: "", label: `${agent.name}[subagent]`, segments: [] };
+              snapshot.messages.push(subagentAssistant);
+            }
+            subagentSegment = { text: "" };
+            subagentAssistant.segments!.push(subagentSegment);
+            this.requestRender();
+          },
+          onDelta: (delta) => {
+            if (!subagentSegment) return;
+            if (delta.thinking) subagentSegment.thinking = `${subagentSegment.thinking ?? ""}${delta.thinking}`;
+            if (delta.content) {
+              subagentSegment.text += delta.content;
+              snapshot.fullOutput += delta.content;
+            }
+            getView()?.invalidate();
+            this.requestRender();
+          },
+          onToolCall: (callId, toolName, callLabel) => {
+            if (!subagentSegment) return;
+            const entry: ToolCallEntry = { id: callId, name: toolName, status: "running", callLabel, spinnerFrame: 0 };
+            subagentSegment.toolCalls = [...(subagentSegment.toolCalls ?? []), entry];
+            pendingEntries.set(callId, entry);
+            const timer = setInterval(() => {
+              entry.spinnerFrame = ((entry.spinnerFrame ?? 0) + 1) % 10;
+              getView()?.invalidate();
+              this.requestRender();
+            }, 80);
+            pendingSpinners.set(callId, timer);
+            getView()?.invalidate();
+            this.requestRender();
+          },
+          onToolResult: (callId, label, isError) => {
+            const entry = pendingEntries.get(callId);
+            if (entry) {
+              entry.status = isError ? "error" : "completed";
+              entry.resultLabel = label;
+              entry.isError = isError;
+            }
+            const timer = pendingSpinners.get(callId);
+            if (timer) { clearInterval(timer); pendingSpinners.delete(callId); }
+            getView()?.invalidate();
+            this.requestRender();
+          },
+          onSummaryTurn: () => {
+            // 总结阶段新建一个 user 消息作为分隔，再新建 assistant 消息承载总结
+            snapshot.messages.push({ kind: "user", text: "Summary", label: "summary" });
+            subagentAssistant = { kind: "assistant", text: "", label: `${agent.name}[subagent]`, segments: [] };
+            snapshot.messages.push(subagentAssistant);
+            subagentSegment = { text: "" };
+            subagentAssistant.segments!.push(subagentSegment);
+            getView()?.invalidate();
+            this.requestRender();
+          },
+          onSummaryDelta: (delta) => {
+            if (!subagentSegment) return;
+            if (delta.content) subagentSegment.text += delta.content;
+            getView()?.invalidate();
+            this.requestRender();
+          },
+        },
+      );
+
+      // 清理所有残留 spinner
+      for (const timer of pendingSpinners.values()) clearInterval(timer);
+      pendingSpinners.clear();
+
+      snapshot.status = "done";
+      snapshot.fullOutput = result.fullOutput;
+      snapshot.toolEntries = result.toolEntries;
+      snapshot.title = result.title;
+      toolEntry.callLabel = result.title || task.slice(0, 60);
+      toolEntry.resultLabel = `${result.toolEntries.length} files read`;
+      getView()?.markDone(result.title);
+      this.requestRender();
+      return result.summary;
+    } catch (err) {
+      for (const timer of pendingSpinners.values()) clearInterval(timer);
+      pendingSpinners.clear();
+      const msg = err instanceof Error ? err.message : String(err);
+      snapshot.status = "error";
+      snapshot.errorMessage = msg;
+      toolEntry.resultLabel = msg.slice(0, 40);
+      getView()?.markError(msg);
+      this.requestRender();
+      return `Explore failed: ${msg}`;
+    }
+  }
+
+  /** ctrl+o：全屏打开最近一个 explore subagent 详情，或关闭已打开的面板 */
+  private toggleSubagentView(): void {
+    if (this.subagentView) {
+      this.closeSubagentView();
+      this.requestRender();
+      return;
+    }
+
+    // 从 assistant 消息的 toolCalls 中找最近一个 explore entry
+    let targetId: string | undefined;
+    outer: for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg?.kind !== "assistant" || !msg.segments) continue;
+      for (let s = msg.segments.length - 1; s >= 0; s--) {
+        const toolCalls = msg.segments[s]?.toolCalls;
+        if (!toolCalls) continue;
+        for (let t = toolCalls.length - 1; t >= 0; t--) {
+          const tc = toolCalls[t];
+          if (tc?.name === "explore" && tc.subagentId) {
+            targetId = tc.subagentId;
+            break outer;
+          }
+        }
+      }
+    }
+    if (!targetId) return;
+
+    const snapshot = this.subagentSnapshots.get(targetId);
+    if (!snapshot) return;
+
+    this.openSubagentId = targetId;
+    const view = new SubagentView(snapshot, () => {
+      this.closeSubagentView();
+      this.requestRender();
+    });
+    this.subagentView = view;
+    this.tui.clear();
+    this.tui.addChild(view);
+    this.tui.setFocus(view);
+    this.requestRender();
+  }
+
+  private closeSubagentView(): void {
+    this.openSubagentId = undefined;
+    this.subagentView = undefined;
+    // 恢复正常布局
+    this.tui.clear();
+    this.tui.addChild(this.root);
     this.tui.setFocus(this.editor);
   }
 

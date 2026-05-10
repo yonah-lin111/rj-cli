@@ -37,6 +37,8 @@ export interface ToolCallEntry {
   displayText?: string;
   /** 当前 spinner 帧索引（running 时使用） */
   spinnerFrame?: number;
+  /** explore subagent 关联的快照 id，用于 ctrl+o */
+  subagentId?: string;
 }
 
 /** assistant 消息的一个轮次段落：thinking + text + tool calls */
@@ -100,6 +102,20 @@ const renderMarkdown = (
 
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
+  // explore subagent 特殊渲染格式
+  if (entry.name === "explore") {
+    const statusIcon =
+      entry.status === "running"
+        ? theme.accent(SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length]!)
+        : entry.status === "error"
+          ? theme.error("✗")
+          : theme.success("✓");
+    const nameLine = `${theme.accent("/explore")} ${statusIcon}`;
+    const taskLine = ` ${theme.dim("⎿")}  ${theme.dim(entry.callLabel)}`;
+    const hintLine = ` ${theme.muted("ctrl+o")}`;
+    return [nameLine, taskLine, hintLine];
+  }
+
   let indicator: string;
   if (entry.name === "ask") {
     if (entry.status === "running") {

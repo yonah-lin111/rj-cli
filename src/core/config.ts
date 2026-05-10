@@ -27,12 +27,22 @@ export interface RJProviderConfig {
   models: RJModelConfig[];
 }
 
+/** 单个 subagent 配置 */
+export interface RJSubagentConfig {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  keybinding: string;
+}
+
 /** 应用全局配置 */
 export interface RJConfig {
   defaultProvider: string;
   defaultModel: string;
   fileReading: RJFileReadingConfig;
   providers: RJProviderConfig[];
+  subagents: RJSubagentConfig[];
   configPath: string;
 }
 
@@ -42,6 +52,7 @@ interface RawRJConfig {
   defaultModel?: unknown;
   fileReading?: unknown;
   providers?: unknown;
+  subagents?: unknown;
 }
 
 /** 配置文件路径 */
@@ -52,6 +63,18 @@ const DEFAULT_FILE_READING: RJFileReadingConfig = {
   maxFileSizeBytes: 1048576,
   maxDirectoryEntries: 200,
   allowedExtensions: [],
+};
+
+/** 内置 explore subagent 默认配置 */
+const DEFAULT_EXPLORE_AGENT: RJSubagentConfig = {
+  id: "explore",
+  name: "Explore",
+  description: "多文件探索 agent，专门用于读取和分析文件内容",
+  systemPrompt:
+    "You are a file exploration assistant. Your job is to read and analyze files as requested by the user. " +
+    "Use the read_file tool to read files. Provide clear, concise summaries of what you find. " +
+    "When exploring multiple files, organize your findings logically.",
+  keybinding: "ctrl+e",
 };
 
 /** 配置文件缺失或解析失败时的兜底配置 */
@@ -66,7 +89,23 @@ const fallbackConfig: RJConfig = {
       models: [{ id: "mock-sonnet", name: "mock-sonnet", contextWindow: 200000, outputLimit: 64000 }],
     },
   ],
+  subagents: [DEFAULT_EXPLORE_AGENT],
   configPath,
+};
+
+/**
+ * 解析单个 subagent 配置，字段不合法返回 null。
+ */
+const parseSubagent = (value: unknown): RJSubagentConfig | null => {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = readString(record, "id");
+  const name = readString(record, "name") ?? id;
+  const description = readString(record, "description") ?? "";
+  const systemPrompt = readString(record, "systemPrompt") ?? "";
+  const keybinding = readString(record, "keybinding") ?? "";
+  if (!id || !name || !keybinding) return null;
+  return { id, name, description, systemPrompt, keybinding };
 };
 
 /**
@@ -165,7 +204,12 @@ export const loadConfig = (): RJConfig => {
         : [],
     };
 
-    return { defaultProvider, defaultModel, fileReading, providers, configPath };
+    const parsedSubagents = Array.isArray(root.subagents)
+      ? root.subagents.map(parseSubagent).filter((s): s is RJSubagentConfig => Boolean(s))
+      : [];
+    const subagents = parsedSubagents.length > 0 ? parsedSubagents : [DEFAULT_EXPLORE_AGENT];
+
+    return { defaultProvider, defaultModel, fileReading, providers, subagents, configPath };
   } catch {
     return fallbackConfig;
   }
@@ -198,6 +242,7 @@ export const saveDefaultModel = (config: RJConfig, providerId: string, modelId: 
     defaultProvider: updated.defaultProvider,
     defaultModel: updated.defaultModel,
     providers: updated.providers,
+    subagents: updated.subagents,
   };
   mkdirSync(dirname(updated.configPath), { recursive: true });
   writeFileSync(updated.configPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
