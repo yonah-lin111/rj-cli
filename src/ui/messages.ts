@@ -142,7 +142,7 @@ const renderTodoList = (entry: ToolCallEntry, width: number): string[] => {
   const frame = SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length];
   return entry.displayText.split("\n").map((line, index) => {
     if (index === 0) return theme.todoTitle(line.replace(/^#\s*/, ""));
-    return theme.todoText(line).replace("[loading]", `[${theme.accent(frame!)}]`);
+    return theme.todoText(line).replace("[loading]", ` ${theme.accent(frame!)} `);
   });
 };
 

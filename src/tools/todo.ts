@@ -48,8 +48,12 @@ export const validateTodos = (value: unknown): TodoItem[] => {
 const formatTodoList = (todos: TodoItem[]): string => {
   const lines = ["# Todos"];
   for (const todo of todos) {
-    const checked = todo.status === "completed" ? "✓" : todo.status === "in_progress" ? "loading" : " ";
-    lines.push(`[${checked}] ${todo.content}`);
+    if (todo.status === "in_progress") {
+      lines.push(`[loading] ${todo.content}`);
+    } else {
+      const checked = todo.status === "completed" ? "✓" : " ";
+      lines.push(`[${checked}] ${todo.content}`);
+    }
   }
   return lines.join("\n");
 };
