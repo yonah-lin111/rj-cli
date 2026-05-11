@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { streamChat, readFileToolSchema, type ChatHistoryMessage, type ToolCall, type ToolResult, type ChatDelta } from "../core/ai.ts";
-import { readFileTool } from "../tools/file-writer.ts";
+import { readFileTool } from "../tools/base/file-writer.ts";
 import type { RJProviderConfig, RJSubagentConfig } from "../core/config.ts";
 
 /** subagent 单次工具调用记录 */

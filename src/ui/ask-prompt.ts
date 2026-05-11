@@ -3,7 +3,7 @@ import {
   getKeybindings, matchesKey,
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
-import type { AskQuestion } from "../tools/ask.ts";
+import type { AskQuestion } from "../tools/base/ask.ts";
 import { editorTheme, theme } from "./theme.ts";
 
 /**

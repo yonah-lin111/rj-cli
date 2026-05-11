@@ -1,7 +1,7 @@
 import { accessSync, constants, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
-import type { RJFileReadingConfig } from "../core/config.ts";
+import type { RJFileReadingConfig } from "../../core/config.ts";
 
 /** 匹配 Unicode 非标准空格字符 */
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;

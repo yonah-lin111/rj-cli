@@ -2,9 +2,9 @@ import {
   Container, Editor, Loader, ProcessTerminal, Spacer, Text, TUI,
   matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
 } from "@mariozechner/pi-tui";
-import { runBash, runBashTool } from "./tools/bash.ts";
-import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/file-writer.ts";
-import { todoWriteTool } from "./tools/todo.ts";
+import { runBash, runBashTool } from "./tools/base/bash.ts";
+import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
+import { todoWriteTool } from "./tools/base/todo.ts";
 import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema } from "./core/ai.ts";
 import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool } from "./tools/rj-server/index.ts";
 import {
@@ -18,10 +18,10 @@ import { headerText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
 import { AskPrompt } from "./ui/ask-prompt.ts";
-import { createAskId, registerAskPending, resolveAsk, rejectAsk, formatAskResult, type AskQuestion } from "./tools/ask.ts";
+import { createAskId, registerAskPending, resolveAsk, rejectAsk, formatAskResult, type AskQuestion } from "./tools/base/ask.ts";
 import { MessagesView, type Message, type AssistantSegment, type ToolCallEntry } from "./ui/messages.ts";
 import { editorTheme, theme } from "./ui/theme.ts";
-import { expandAtMentions } from "./tools/file-reader.ts";
+import { expandAtMentions } from "./tools/base/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
 import { buildSystemPrompt } from "./prompts/system.ts";
 import { generateSessionId, saveSession, loadSession, listSessions, generateSessionTitle, type SessionRecord } from "./core/session.ts";
