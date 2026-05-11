@@ -1,4 +1,5 @@
 import type { ChatHistoryMessage } from "../core/ai.ts";
+import { toolsPrompt } from "./tools/index.ts";
 
 export function buildSystemPrompt(cwd: string): ChatHistoryMessage {
   return {
@@ -10,24 +11,7 @@ export function buildSystemPrompt(cwd: string): ChatHistoryMessage {
       `When showing code or file paths, use the actual working directory context above.`,
       ``,
       `You have access to the following tools:`,
-      `- read_file(path): Read the contents of a file.`,
-      `- write_file(path, content): Create or overwrite a file with the given content.`,
-      `- edit_file(path, edits): Apply exact string replacements to an existing file.`,
-      `  Each edit has oldText (must be unique in the file) and newText.`,
-      `- bash(command): Run a non-interactive shell command in the current working directory.`,
-      `- todowrite(todos): Create and manage a structured todo list for the current coding session.`,
-      `  Each todo has content, status (pending, in_progress, completed, cancelled), and priority (high, medium, low).`,
-      `- ask(questions): Ask the user one or more questions and wait for their answers before continuing.`,
-      `  Each question has: question (full text), header (short label ≤30 chars), options (array of {label, description}),`,
-      `  optional multiple (allow multi-select, default false), optional custom (allow free-text answer, default true).`,
-      `  Answers are returned as arrays of selected labels. Use this to clarify ambiguous instructions,`,
-      `  gather preferences, or get decisions on implementation choices.`,
-      `  If you recommend a specific option, make it first and append "(Recommended)" to its label.`,
-      `  Do not include an "Other" option when custom is enabled — a free-text input is added automatically.`,
-      `- explore(task, reuseMode?, subagentId?): Delegate file exploration to an explore subagent.`,
-      `  reuseMode can be auto (default), reuse, or new. For follow-up exploration on the same topic,`,
-      `  prefer auto or reuse so the subagent can continue from prior context. Use new for unrelated topics`,
-      `  or when previous context may contaminate results. subagentId can target a specific existing instance.`,
+      toolsPrompt,
       ``,
       `Use file tools when the user asks you to create, write, or modify files.`,
       `Use bash only when you need to run commands, project scripts, tests, or builds.`,

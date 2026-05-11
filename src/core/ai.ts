@@ -529,6 +529,51 @@ export const exploreToolSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+/** rj_work_ops_preview tool 的 OpenAI schema */
+export const rjWorkOpsPreviewSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_work_ops_preview",
+    description: "预览作品处理结果：从文件夹名提取RJ号，匹配数据库中的作品信息，扫描音频/图片文件，返回预览数据（输出路径、文件列表等）。在执行 rj_work_ops_process 前必须先调用此工具。",
+    parameters: {
+      type: "object",
+      properties: {
+        source_path: { type: "string", description: "源文件夹路径，文件夹名需包含RJ号（如 RJ123456）。" },
+        target_format: { type: "string", enum: ["flac", "mp3", "none"], description: "目标格式：flac、mp3 或 none（不转换）。" },
+        output_base_path: { type: "string", description: "输出基础路径，留空则输出到源文件夹同级目录。" },
+        multi_folder: { type: "boolean", description: "多音声文件夹模式，源文件夹下有多个子文件夹时使用。默认 false。" },
+      },
+      required: ["source_path", "target_format"],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** rj_work_ops_process tool 的 OpenAI schema */
+export const rjWorkOpsProcessSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_work_ops_process",
+    description: "执行作品格式转换和文件整理，实时返回进度。调用前必须先用 rj_work_ops_preview 预览，并通过 ask 工具向用户确认参数。",
+    parameters: {
+      type: "object",
+      properties: {
+        source_path: { type: "string", description: "源文件夹路径。" },
+        target_format: { type: "string", enum: ["flac", "mp3", "none"], description: "目标格式。" },
+        keep_source: { type: "boolean", description: "是否保留源文件，默认 true。" },
+        threads: { type: "number", description: "并发转换线程数，1-8，默认 2。" },
+        output_base_path: { type: "string", description: "输出基础路径。" },
+        force_overwrite: { type: "boolean", description: "是否强制覆盖已存在的输出目录，默认 false。" },
+        multi_folder: { type: "boolean", description: "多音声文件夹模式，默认 false。" },
+        selected_folders: { type: "array", items: { type: "string" }, description: "多文件夹模式下选中的子文件夹名称列表。" },
+        cover_image: { type: "string", description: "自定义封面文件名（可选）。" },
+      },
+      required: ["source_path", "target_format", "keep_source", "threads", "output_base_path"],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** bash tool 的 OpenAI schema */
 export const bashToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",

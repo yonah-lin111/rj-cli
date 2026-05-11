@@ -23,7 +23,9 @@ export type CommandAction =
   | { type: "show-session-selector" }
   | { type: "clear"; messages?: string[] }
   | { type: "undo" }
-  | { type: "quit" };
+  | { type: "quit" }
+  | { type: "chat"; text: string }
+  | { type: "fill-input"; text: string; cursorCol?: number };
 
 /** 斜杠命令定义 */
 export interface SlashCommand {
@@ -73,6 +75,25 @@ const commandList: SlashCommand[] = [
     usage: "/quit",
     description: "Exit RJ.",
     handler: () => ({ type: "quit" }),
+  },
+  {
+    name: "/workMatch",
+    usage: "/workMatch [path]",
+    description: "Preview and process a work folder (format conversion & file organization).",
+    handler: (args) => {
+      const raw = args.join(" ").trim();
+      const path = raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1).trim() : raw;
+      if (!path) {
+        return { type: "fill-input", text: "/workMatch []", cursorCol: "/workMatch [".length };
+      }
+      return {
+        type: "chat",
+        text: `请对作品文件夹 "${path}" 执行作品匹配和格式转换流程：
+1. 先调用 rj_work_ops_preview 预览（target_format 默认用 "flac"）
+2. 根据预览结果，用一次 ask 调用同时询问所有参数：格式转换、线程数、是否保留源文件、封面图片选择、输出路径（如果是多文件夹模式还需询问选择哪些子文件夹）
+3. 根据用户回答调用 rj_work_ops_process 执行处理`,
+      };
+    },
   },
 ];
 

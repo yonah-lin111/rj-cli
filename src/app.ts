@@ -5,8 +5,9 @@ import {
 import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema } from "./core/ai.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
 import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool } from "./tools/rj-server/index.ts";
+import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
   saveDefaultModel, savePromptHistory,
@@ -225,6 +226,10 @@ export class RJApp {
 
     const isSingleLine = !/[\r\n]/.test(rawText);
     if (isSingleLine && text.startsWith("/") && /^\/[^\s/]+(\s|$)/.test(text)) {
+      if (this.promptHistory.at(-1) !== text) {
+        this.promptHistory.push(text);
+        savePromptHistory(this.promptHistory);
+      }
       this.handleSlash(text);
       return;
     }
@@ -290,7 +295,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -412,6 +417,36 @@ export class RJApp {
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;
                 entry.resultText = resultText;
+              } else if (call.name === "rj_work_ops_preview") {
+                const result = previewWorkOps(args as unknown as WorkOpsPreviewArgs);
+                resultText = JSON.stringify(result, null, 2);
+                isError = !result.success;
+                entry.resultLabel = result.success ? `预览: ${result.rj_code ?? ""}` : "预览失败";
+                entry.resultText = resultText;
+              } else if (call.name === "rj_work_ops_process") {
+                entry.resultLabel = "处理中...";
+                clearInterval(spinnerTimer);
+                this.requestRender();
+                const events: string[] = [];
+                try {
+                  for await (const event of processWorkOps(args as unknown as WorkOpsProcessArgs)) {
+                    const line = `[${event.step}] ${event.message}${event.progress !== undefined ? ` (${event.progress}/${event.total})` : ""}`;
+                    events.push(line);
+                    entry.resultText = events.join("\n");
+                    entry.resultLabel = event.step === "done" ? "处理完成" : `处理中: ${event.step}`;
+                    this.requestRender();
+                    if (event.step === "error") {
+                      isError = true;
+                      entry.resultLabel = "处理失败";
+                    }
+                  }
+                  resultText = events.join("\n");
+                } catch (e) {
+                  resultText = `处理异常: ${e instanceof Error ? e.message : String(e)}`;
+                  isError = true;
+                  entry.resultLabel = "处理失败";
+                  entry.resultText = resultText;
+                }
               } else if (call.name === "explore") {
                 const task = typeof args.task === "string" ? args.task : "Explore files";
                 const reuseMode = args.reuseMode === "reuse" || args.reuseMode === "new" ? args.reuseMode : "auto";
@@ -703,6 +738,25 @@ export class RJApp {
     if (action.type === "system-messages") {
       for (const message of action.messages) this.addMessage("system", message);
       this.requestRender();
+      return;
+    }
+
+    if (action.type === "fill-input") {
+      this.editor.setText(action.text);
+      if (action.cursorCol !== undefined) {
+        // setText 后光标在末尾，发送左箭头将光标移到 ] 前
+        const currentLen = action.text.length;
+        const moves = currentLen - action.cursorCol;
+        for (let i = 0; i < moves; i++) {
+          this.editor.handleInput("\x1b[D");
+        }
+      }
+      this.requestRender();
+      return;
+    }
+
+    if (action.type === "chat") {
+      void this.handleChat(action.text);
       return;
     }
 
