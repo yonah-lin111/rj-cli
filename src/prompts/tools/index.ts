@@ -73,6 +73,7 @@ matches the DB record, and returns the file list and output path preview.
 Usage:
 - Always call this FIRST before rj_work_ops_process.
 - Use target_format="flac" as the default.
+- Set multi_folder=false for single-folder mode (audio files at root), multi_folder=true for multi-folder mode (subfolders each contain audio).
 - Use the result to show the user what will happen before any files are modified.
 
 rj_work_ops_process(source_path, target_format, keep_source, threads, output_base_path, force_overwrite?, multi_folder?, selected_folders?, cover_image?)
@@ -82,18 +83,29 @@ Parameters:
 - target_format: flac | mp3 | none
 - keep_source: true to preserve originals
 - threads: 1–8 (default 2)
-- In multi_folder mode, use selected_folders to specify which subfolders to process.
+- multi_folder: false for single-folder mode, true for multi-folder mode
+- selected_folders: only used in multi_folder=true mode
 
-Recommended workflow:
-1. Call rj_work_ops_preview to get file list and cover info.
-2. Call ask ONCE with ALL of the following questions in a single call:
+Single-folder workflow (/workMatch):
+1. Call rj_work_ops_preview with multi_folder=false.
+2. Call ask ONCE with ALL of the following questions:
    Q1 header="格式转换"  — options: flac (Recommended), mp3, none
    Q2 header="线程数"    — options: 2 (Recommended), 1, 4, 8
    Q3 header="保留源文件" — options: 是 (Recommended), 否
    Q4 header="封面图片"  — list image filenames from preview; custom=true
    Q5 header="输出路径"  — show output_path_preview as first option (Recommended); custom=true
-   If multi_folder: also add Q6 header="选择子文件夹" with sub_folder names; multiple=true
-3. Call rj_work_ops_process with the confirmed parameters.
+3. Call rj_work_ops_process with multi_folder=false.
+
+Multi-folder workflow (/workMatchMulti):
+1. Call rj_work_ops_preview with multi_folder=true.
+2. Call ask ONCE with ALL of the following questions:
+   Q1 header="格式转换"  — options: flac (Recommended), mp3, none
+   Q2 header="线程数"    — options: 2 (Recommended), 1, 4, 8
+   Q3 header="保留源文件" — options: 是 (Recommended), 否
+   Q4 header="封面图片"  — list image filenames from preview; custom=true
+   Q5 header="输出路径"  — show output_path_preview as first option (Recommended); custom=true
+   Q6 header="选择子文件夹" — list sub_folder names from preview; multiple=true
+3. Call rj_work_ops_process with multi_folder=true and selected_folders from Q6.
 
 explore(task, reuseMode?, subagentId?)
 Delegate file exploration to an explore subagent.
