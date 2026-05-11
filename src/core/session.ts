@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import type { ChatHistoryMessage } from "./ai.ts";
 import type { RJProviderConfig } from "./config.ts";
 import type { Message } from "../ui/messages.ts";
+import type { SubagentSnapshot } from "../ui/subagent-view.ts";
 
 /** 单个会话的持久化结构 */
 export interface SessionRecord {
@@ -14,6 +15,7 @@ export interface SessionRecord {
   updatedAt: string;
   sessionMessages: ChatHistoryMessage[];
   uiMessages: Message[];
+  subagentSnapshots?: SubagentSnapshot[];
 }
 
 const sessionsDir = join(homedir(), ".RJ", "sessions");
@@ -42,6 +44,7 @@ export const saveSession = (
   uiMessages: Message[],
   createdAt: Date,
   title?: string,
+  subagentSnapshots?: SubagentSnapshot[],
 ): void => {
   ensureDir();
   const existing = loadSession(id);
@@ -52,6 +55,7 @@ export const saveSession = (
     updatedAt: new Date().toISOString(),
     sessionMessages,
     uiMessages,
+    subagentSnapshots,
   };
   writeFileSync(sessionPath(id), `${JSON.stringify(record, null, 2)}\n`, "utf8");
 };

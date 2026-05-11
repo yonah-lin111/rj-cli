@@ -17,6 +17,7 @@ import { Footer } from "./ui/footer.ts";
 import { headerText, subagentHeaderText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
+import { SubagentSelector } from "./ui/subagent-selector.ts";
 import { AskPrompt } from "./ui/ask-prompt.ts";
 import { createAskId, registerAskPending, resolveAsk, rejectAsk, formatAskResult, type AskQuestion } from "./tools/base/ask.ts";
 import { MessagesView, type Message, type AssistantSegment, type ToolCallEntry } from "./ui/messages.ts";
@@ -45,6 +46,7 @@ export class RJApp {
   private todoLoadingTimer?: NodeJS.Timeout;
   private modelSelector?: ModelSelector;
   private sessionSelector?: SessionSelector;
+  private subagentSelector?: SubagentSelector;
   private askPrompt?: AskPrompt;
   /** 所有 subagent 执行快照，按 subagentId 索引，用于 ctrl+o 重新打开 */
   private subagentSnapshots = new Map<string, SubagentSnapshot>();
@@ -65,6 +67,8 @@ export class RJApp {
   private suppressEscapeCancelUntil = 0;
   private promptTimer?: NodeJS.Timeout;
   private stopped = false;
+  private ignoreNextSigint = false;
+  private ignoreNextSigintTimer?: NodeJS.Timeout;
   private state: AppState = createInitialState(this.config);
 
   async start(): Promise<void> {
@@ -127,9 +131,8 @@ export class RJApp {
   private setupInputHandlers(): void {
     this.tui.addInputListener((data) => {
       if (matchesKey(data, "ctrl+c")) {
-        if (this.editor.getText().length > 0) {
-          this.editor.setText("");
-          this.requestRender();
+        if (this.clearEditorForCtrlC()) {
+          this.suppressNextSigint();
         } else {
           this.stop(0);
         }
@@ -144,6 +147,17 @@ export class RJApp {
 
       if (this.sessionSelector) {
         this.sessionSelector.handleInput(data);
+        this.requestRender();
+        return { consume: true };
+      }
+
+      if (this.subagentSelector) {
+        if (matchesKey(data, "escape")) {
+          this.closeSubagentSelector();
+          this.requestRender();
+          return { consume: true };
+        }
+        this.subagentSelector.handleInput(data);
         this.requestRender();
         return { consume: true };
       }
@@ -168,14 +182,40 @@ export class RJApp {
 
   private setupSignals(): void {
     process.on("SIGINT", () => {
-      if (this.editor.getText().length > 0) {
-        this.editor.setText("");
-        this.requestRender();
-      } else {
-        this.stop(0);
+      if (this.ignoreNextSigint) {
+        this.ignoreNextSigint = false;
+        if (this.ignoreNextSigintTimer) {
+          clearTimeout(this.ignoreNextSigintTimer);
+          this.ignoreNextSigintTimer = undefined;
+        }
+        return;
       }
+      if (this.clearEditorForCtrlC()) {
+        return;
+      }
+      this.stop(0);
     });
     process.on("SIGTERM", () => this.stop(0));
+  }
+
+  private clearEditorForCtrlC(): boolean {
+    if (this.editor.getText().length === 0) {
+      return false;
+    }
+    this.editor.setText("");
+    this.requestRender();
+    return true;
+  }
+
+  private suppressNextSigint(): void {
+    this.ignoreNextSigint = true;
+    if (this.ignoreNextSigintTimer) {
+      clearTimeout(this.ignoreNextSigintTimer);
+    }
+    this.ignoreNextSigintTimer = setTimeout(() => {
+      this.ignoreNextSigint = false;
+      this.ignoreNextSigintTimer = undefined;
+    }, 100);
   }
 
   private async handleSubmit(rawText: string): Promise<void> {
@@ -374,6 +414,8 @@ export class RJApp {
                 entry.resultText = resultText;
               } else if (call.name === "explore") {
                 const task = typeof args.task === "string" ? args.task : "Explore files";
+                const reuseMode = args.reuseMode === "reuse" || args.reuseMode === "new" ? args.reuseMode : "auto";
+                const subagentId = typeof args.subagentId === "string" ? args.subagentId : undefined;
                 const exploreAgent = this.config.subagents.find((a) => a.id === "explore");
                 if (!exploreAgent) {
                   resultText = "Explore agent not configured.";
@@ -388,9 +430,10 @@ export class RJApp {
                     this.requestRender();
                   }, 80);
                   this.requestRender();
-                  const subagentResult = await this.runExploreSubagent(exploreAgent, task, entry);
+                  const subagentResult = await this.runExploreSubagent(exploreAgent, task, entry, { reuseMode, subagentId });
                   clearInterval(exploreSpinner);
-                  resultText = subagentResult;
+                  resultText = subagentResult.content;
+                  isError = subagentResult.isError;
                 }
               } else if (call.name === "ask") {
                 const questions = args.questions as AskQuestion[];
@@ -614,6 +657,9 @@ export class RJApp {
       this.persistSession();
       this.messages = [];
       this.sessionMessages = [];
+      this.subagentSnapshots.clear();
+      this.openSubagentId = undefined;
+      this.subagentSelector = undefined;
       this.currentSessionId = generateSessionId();
       this.currentSessionTitle = undefined;
       this.state.messageCount = 0;
@@ -835,11 +881,28 @@ export class RJApp {
     agent: RJSubagentConfig,
     task: string,
     toolEntry: ToolCallEntry,
-  ): Promise<string> {
-    const snapshot = createSubagentSnapshot(agent, task.slice(0, 80));
-    const subagentId = `${agent.id}-${Date.now()}`;
-    this.subagentSnapshots.set(subagentId, snapshot);
-    toolEntry.subagentId = subagentId;
+    options: { reuseMode: "auto" | "reuse" | "new"; subagentId?: string },
+  ): Promise<{ content: string; isError: boolean }> {
+    const resolved = this.resolveSubagentSnapshot(agent, task, options.reuseMode, options.subagentId);
+    if ("error" in resolved) {
+      toolEntry.status = "error";
+      toolEntry.resultLabel = resolved.error;
+      toolEntry.isError = true;
+      return { content: resolved.error, isError: true };
+    }
+
+    const { snapshot, action } = resolved;
+    const previousFullOutput = snapshot.fullOutput;
+    const now = new Date().toISOString();
+    snapshot.status = "running";
+    snapshot.updatedAt = now;
+    snapshot.lastRunAt = now;
+    snapshot.errorMessage = undefined;
+    if (action === "reuse") snapshot.messages.push({ kind: "user", text: task, label: "main" });
+    toolEntry.subagentId = snapshot.id;
+    toolEntry.subagentAction = action;
+    toolEntry.subagentAgentId = agent.id;
+    toolEntry.callLabel = `${action === "new" ? "New" : "Reuse"}: ${task.slice(0, 52)}`;
 
     const provider = getProvider(this.config, this.state.provider);
     const model = getModel(provider, this.state.model);
@@ -916,62 +979,116 @@ export class RJApp {
             this.requestRender();
           },
         },
+        this.activeAIAbort?.signal,
+        snapshot.conversationHistory,
       );
 
       // 清理所有残留 spinner
       for (const timer of pendingSpinners.values()) clearInterval(timer);
       pendingSpinners.clear();
 
+      const finishedAt = new Date().toISOString();
       snapshot.status = "done";
-      snapshot.fullOutput = result.fullOutput;
-      snapshot.toolEntries = result.toolEntries;
+      snapshot.fullOutput = previousFullOutput + result.fullOutput;
+      snapshot.toolEntries = [...snapshot.toolEntries, ...result.toolEntries];
       snapshot.title = result.title;
-      toolEntry.callLabel = result.title || task.slice(0, 60);
+      snapshot.conversationHistory = result.conversationHistory;
+      snapshot.runCount += 1;
+      snapshot.updatedAt = finishedAt;
+      snapshot.lastRunAt = finishedAt;
+      toolEntry.callLabel = `${action === "new" ? "New" : "Reuse"}: ${result.title || task.slice(0, 52)}`;
       toolEntry.resultLabel = `${result.toolEntries.length} files read`;
+      toolEntry.subagentTitle = snapshot.title;
       this.requestRender();
-      return result.summary;
+      return { content: result.summary, isError: false };
     } catch (err) {
       for (const timer of pendingSpinners.values()) clearInterval(timer);
       pendingSpinners.clear();
       const msg = err instanceof Error ? err.message : String(err);
       snapshot.status = "error";
       snapshot.errorMessage = msg;
+      snapshot.updatedAt = new Date().toISOString();
       toolEntry.resultLabel = msg.slice(0, 40);
       snapshot.messages.push({ kind: "error", text: msg, label: "error" });
       this.requestRender();
-      return `Explore failed: ${msg}`;
+      return { content: `Explore failed: ${msg}`, isError: true };
     }
   }
 
-  /** ctrl+o：在主消息列表位置打开最近一个 explore subagent 详情 */
+  private resolveSubagentSnapshot(
+    agent: RJSubagentConfig,
+    task: string,
+    reuseMode: "auto" | "reuse" | "new",
+    subagentId?: string,
+  ): { snapshot: SubagentSnapshot; action: "new" | "reuse" } | { error: string } {
+    if (subagentId) {
+      const snapshot = this.subagentSnapshots.get(subagentId);
+      if (!snapshot) return { error: `Subagent not found: ${subagentId}` };
+      if (snapshot.agentId !== agent.id) return { error: `Subagent ${subagentId} belongs to ${snapshot.agentId}, not ${agent.id}.` };
+      if (snapshot.status === "running") return { error: `Subagent ${subagentId} is busy.` };
+      if (reuseMode === "new") return this.createResolvedSubagentSnapshot(agent, task);
+      return { snapshot, action: "reuse" };
+    }
+
+    if (reuseMode === "new") return this.createResolvedSubagentSnapshot(agent, task);
+
+    const reusable = [...this.subagentSnapshots.values()]
+      .filter((snapshot) => snapshot.agentId === agent.id && snapshot.status !== "running")
+      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+    if (reusable) return { snapshot: reusable, action: "reuse" };
+    if (reuseMode === "reuse") return { error: `No reusable ${agent.name} subagent is available.` };
+    return this.createResolvedSubagentSnapshot(agent, task);
+  }
+
+  private createResolvedSubagentSnapshot(
+    agent: RJSubagentConfig,
+    task: string,
+  ): { snapshot: SubagentSnapshot; action: "new" } {
+    const id = `${agent.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const snapshot = createSubagentSnapshot(agent, task.slice(0, 80), id);
+    this.subagentSnapshots.set(id, snapshot);
+    return { snapshot, action: "new" };
+  }
+
+  /** ctrl+o：打开 subagent 选择面板 */
   private openSubagentView(): void {
     if (this.openSubagentId) return;
+    this.showSubagentSelector();
+  }
 
-    // 从 assistant 消息的 toolCalls 中找最近一个 explore entry
-    let targetId: string | undefined;
-    outer: for (let i = this.messages.length - 1; i >= 0; i--) {
-      const msg = this.messages[i];
-      if (msg?.kind !== "assistant" || !msg.segments) continue;
-      for (let s = msg.segments.length - 1; s >= 0; s--) {
-        const toolCalls = msg.segments[s]?.toolCalls;
-        if (!toolCalls) continue;
-        for (let t = toolCalls.length - 1; t >= 0; t--) {
-          const tc = toolCalls[t];
-          if (tc?.name === "explore" && tc.subagentId) {
-            targetId = tc.subagentId;
-            break outer;
-          }
-        }
-      }
+  private showSubagentSelector(): void {
+    const snapshots = [...this.subagentSnapshots.values()];
+    if (snapshots.length === 0) {
+      this.showPrompt("No subagents in this session.");
+      return;
     }
-    if (!targetId) return;
-
-    const snapshot = this.subagentSnapshots.get(targetId);
-    if (!snapshot) return;
-
-    this.openSubagentId = targetId;
-    this.tui.setFocus(null);
+    if (snapshots.length === 1) {
+      this.openSubagentId = snapshots[0]!.id;
+      this.tui.setFocus(null);
+      this.requestRender();
+      return;
+    }
+    const selector = new SubagentSelector(
+      snapshots,
+      (snapshot) => {
+        this.closeSubagentSelector();
+        this.openSubagentId = snapshot.id;
+        this.tui.setFocus(null);
+        this.requestRender();
+      },
+      () => {
+        this.closeSubagentSelector();
+        this.requestRender();
+      },
+    );
+    this.subagentSelector = selector;
+    this.tui.setFocus(selector);
     this.requestRender();
+  }
+
+  private closeSubagentSelector(): void {
+    this.subagentSelector = undefined;
+    this.tui.setFocus(this.editor);
   }
 
   private closeSubagentViewFromEscape(): void {
@@ -989,6 +1106,9 @@ export class RJApp {
     this.persistSession();
     this.messages = session.uiMessages;
     this.sessionMessages = session.sessionMessages;
+    this.subagentSnapshots = new Map((session.subagentSnapshots ?? []).map((snapshot) => [snapshot.id, snapshot]));
+    this.openSubagentId = undefined;
+    this.subagentSelector = undefined;
     this.currentSessionId = session.id;
     this.currentSessionTitle = session.title;
     this.state.messageCount = this.messages.filter((m) => m.kind === "user" || m.kind === "assistant").length;
@@ -997,7 +1117,14 @@ export class RJApp {
 
   private persistSession(): void {
     if (this.sessionMessages.length === 0) return;
-    saveSession(this.currentSessionId, this.sessionMessages, this.messages, this.state.startedAt, this.currentSessionTitle);
+    saveSession(
+      this.currentSessionId,
+      this.sessionMessages,
+      this.messages,
+      this.state.startedAt,
+      this.currentSessionTitle,
+      Array.from(this.subagentSnapshots.values()),
+    );
   }
 
   private setModel(modelId: string): void {
@@ -1032,6 +1159,8 @@ export class RJApp {
       this.chat.addChild(this.modelSelector);
     } else if (this.sessionSelector) {
       this.chat.addChild(this.sessionSelector);
+    } else if (this.subagentSelector) {
+      this.chat.addChild(this.subagentSelector);
     } else {
       const messages = subagentSnapshot ? subagentSnapshot.messages : this.messages;
       this.chat.addChild(new MessagesView(() => messages));

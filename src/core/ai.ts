@@ -505,13 +505,22 @@ export const exploreToolSchema: OpenAI.Chat.ChatCompletionTool = {
   function: {
     name: "explore",
     description:
-      "Delegate file exploration to a specialized subagent. Use when you need to read and analyze multiple files to understand code structure, find implementations, or gather context. The subagent will read files and return a summary.",
+      "Delegate file exploration to a specialized subagent. Use when you need to read and analyze multiple files to understand code structure, find implementations, or gather context. Prefer reusing a same-topic subagent with reuseMode auto/reuse so it can continue from prior context; use reuseMode new for unrelated topics or when previous context may contaminate results. The subagent will read files and return a summary.",
     parameters: {
       type: "object",
       properties: {
         task: {
           type: "string",
           description: "Description of what to explore or find. Be specific about which files or patterns to look for.",
+        },
+        reuseMode: {
+          type: "string",
+          enum: ["auto", "reuse", "new"],
+          description: "auto (default) reuses the latest non-running same-type subagent or creates one; reuse requires an existing match; new always creates a fresh subagent.",
+        },
+        subagentId: {
+          type: "string",
+          description: "Optional existing subagent id to reuse when reuseMode is reuse or auto.",
         },
       },
       required: ["task"],

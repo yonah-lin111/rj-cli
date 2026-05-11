@@ -17,6 +17,8 @@ export interface SubagentResult {
   summary: string;
   /** 从输出首行提取的简短 title */
   title: string;
+  /** 可复用的真实探索对话历史，不包含总结请求和总结回答 */
+  conversationHistory: ChatHistoryMessage[];
 }
 
 /** subagent 流式输出回调 */
@@ -55,10 +57,12 @@ export const runSubagent = async (
   cwd: string,
   callbacks: SubagentCallbacks = {},
   signal?: AbortSignal,
+  history: ChatHistoryMessage[] = [],
 ): Promise<SubagentResult> => {
+  const explorationHistory: ChatHistoryMessage[] = [...history, { role: "user", content: userMessage }];
   const messages: ChatHistoryMessage[] = [
     { role: "system", content: agent.systemPrompt },
-    { role: "user", content: userMessage },
+    ...explorationHistory,
   ];
 
   let fullOutput = "";
@@ -115,17 +119,20 @@ export const runSubagent = async (
     },
     onHistoryMessage: (message) => {
       messages.push(message);
+      explorationHistory.push(message);
     },
   });
 
-  // 追加总结请求：基于完整对话历史，生成结构化总结
-  messages.push({ role: "user", content: SUMMARY_PROMPT });
+  const summaryMessages: ChatHistoryMessage[] = [
+    ...messages,
+    { role: "user", content: SUMMARY_PROMPT },
+  ];
   let summary = "";
 
   await streamChat({
     provider,
     model: modelId,
-    messages,
+    messages: summaryMessages,
     maxTokens: 2048,
     tools: [],
     signal,
@@ -144,5 +151,6 @@ export const runSubagent = async (
     toolEntries,
     summary: summary.trim() || fullOutput.trim().slice(0, 2000),
     title: extractTitle(fullOutput, userMessage),
+    conversationHistory: explorationHistory,
   };
 };

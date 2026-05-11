@@ -39,6 +39,9 @@ export interface ToolCallEntry {
   spinnerFrame?: number;
   /** explore subagent 关联的快照 id，用于 ctrl+o */
   subagentId?: string;
+  subagentAction?: "new" | "reuse";
+  subagentTitle?: string;
+  subagentAgentId?: string;
 }
 
 /** assistant 消息的一个轮次段落：thinking + text + tool calls */
