@@ -61,6 +61,7 @@ export class RJApp {
   private cancelledQA?: { sessionStartIndex: number };
   private pendingUndoPrompt?: string;
   private lastEscapeAt = 0;
+  private suppressEscapeCancelUntil = 0;
   private promptTimer?: NodeJS.Timeout;
   private stopped = false;
   private state: AppState = createInitialState(this.config);
@@ -129,9 +130,9 @@ export class RJApp {
         return { consume: true };
       }
 
-      // ctrl+o 打开/关闭最近一个 subagent 详情
+      // ctrl+o 打开最近一个 subagent 详情
       if (matchesKey(data, "ctrl+o")) {
-        this.toggleSubagentView();
+        this.openSubagentView();
         return { consume: true };
       }
 
@@ -147,8 +148,10 @@ export class RJApp {
         return { consume: true };
       }
       if (this.subagentView) {
-        this.closeSubagentView();
-        this.requestRender();
+        this.closeSubagentViewFromEscape();
+        return { consume: true };
+      }
+      if (Date.now() < this.suppressEscapeCancelUntil) {
         return { consume: true };
       }
       if (!this.runningAI) return;
@@ -942,13 +945,9 @@ export class RJApp {
     }
   }
 
-  /** ctrl+o：全屏打开最近一个 explore subagent 详情，或关闭已打开的面板 */
-  private toggleSubagentView(): void {
-    if (this.subagentView) {
-      this.closeSubagentView();
-      this.requestRender();
-      return;
-    }
+  /** ctrl+o：全屏打开最近一个 explore subagent 详情 */
+  private openSubagentView(): void {
+    if (this.subagentView) return;
 
     // 从 assistant 消息的 toolCalls 中找最近一个 explore entry
     let targetId: string | undefined;
@@ -974,13 +973,18 @@ export class RJApp {
 
     this.openSubagentId = targetId;
     const view = new SubagentView(snapshot, () => {
-      this.closeSubagentView();
-      this.requestRender();
+      this.closeSubagentViewFromEscape();
     });
     this.subagentView = view;
     this.tui.clear();
     this.tui.addChild(view);
     this.tui.setFocus(view);
+    this.requestRender();
+  }
+
+  private closeSubagentViewFromEscape(): void {
+    this.suppressEscapeCancelUntil = Date.now() + 250;
+    this.closeSubagentView();
     this.requestRender();
   }
 
