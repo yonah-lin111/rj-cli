@@ -421,10 +421,10 @@ export class RJApp {
                 const result = previewWorkOps(args as unknown as WorkOpsPreviewArgs);
                 resultText = JSON.stringify(result, null, 2);
                 isError = !result.success;
-                entry.resultLabel = result.success ? `预览: ${result.rj_code ?? ""}` : "预览失败";
+                entry.resultLabel = result.success ? `Preview: ${result.rj_code ?? ""}` : "Preview failed";
                 entry.resultText = resultText;
               } else if (call.name === "rj_work_ops_process") {
-                entry.resultLabel = "处理中...";
+                entry.resultLabel = "Processing...";
                 clearInterval(spinnerTimer);
                 this.requestRender();
                 const events: string[] = [];
@@ -433,7 +433,7 @@ export class RJApp {
                     const line = `[${event.step}] ${event.message}${event.progress !== undefined ? ` (${event.progress}/${event.total})` : ""}`;
                     events.push(line);
                     entry.resultText = events.join("\n");
-                    entry.resultLabel = event.step === "done" ? "处理完成" : `处理中: ${event.step}`;
+                    entry.resultLabel = event.step === "done" ? "Done" : `Processing: ${event.step}`;
                     this.requestRender();
                     if (event.step === "error") {
                       isError = true;

@@ -258,7 +258,9 @@ export const previewWorkOps = (args: WorkOpsPreviewArgs): WorkOpsPreviewResult =
   const cv = row.cv != null ? String(row.cv) : null;
   const cv_folder_name = getCvFolderName(cv);
   const base = output_base_path || join(source_path, "..");
-  const output_path_preview = join(base, cv_folder_name, title);
+  const output_path_preview = basename(base) === cv_folder_name
+    ? join(base, title)
+    : join(base, cv_folder_name, title);
 
   if (multi_folder) {
     const { sub_folders, root_images, root_audio, root_others } = scanDirectoryMulti(source_path);
@@ -404,7 +406,9 @@ async function* processSingleFolder(
   // 输出目录
   const cv_folder = getCvFolderName(cv);
   const base = output_base_path || join(source_path, "..");
-  const output_dir = join(base, cv_folder, title);
+  const output_dir = basename(base) === cv_folder
+    ? join(base, title)
+    : join(base, cv_folder, title);
   const image_dir = join(output_dir, "image");
 
   if (existsSync(output_dir) && !isDirEmpty(output_dir)) {
@@ -543,7 +547,9 @@ async function* processMulti(
   // 输出目录
   const cv_folder = getCvFolderName(cv);
   const base = output_base_path || join(source_path, "..");
-  const output_dir = join(base, cv_folder, title);
+  const output_dir = basename(base) === cv_folder
+    ? join(base, title)
+    : join(base, cv_folder, title);
   const image_dir = join(output_dir, "image");
 
   if (existsSync(output_dir) && !isDirEmpty(output_dir)) {
