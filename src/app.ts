@@ -183,7 +183,8 @@ export class RJApp {
     if (!text) return;
     this.editor.addToHistory(text);
 
-    if (text.startsWith("/") && /^\/[^\s/]+(\s|$)/.test(text)) {
+    const isSingleLine = !/[\r\n]/.test(rawText);
+    if (isSingleLine && text.startsWith("/") && /^\/[^\s/]+(\s|$)/.test(text)) {
       this.handleSlash(text);
       return;
     }
@@ -590,6 +591,7 @@ export class RJApp {
   private showPrompt(message: string): void {
     if (this.promptTimer) clearTimeout(this.promptTimer);
     this.state.prompt = message;
+    this.requestRender();
     // 3 秒后自动清除提示
     this.promptTimer = setTimeout(() => {
       this.state.prompt = undefined;
