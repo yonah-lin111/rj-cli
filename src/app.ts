@@ -451,7 +451,7 @@ export class RJApp {
                   entry.resultLabel = result.resultLabel;
                   entry.resultText = resultText;
                   entry.displayText = answers
-                    .map((ans, i) => `${questions[i]?.header ?? ""}: ${ans.join(", ")}`)
+                    .map((ans, i) => `${questions[i]?.header ?? ""}:${ans.join(", ")}`)
                     .join("\n");
                 } catch {
                   resultText = "The user dismissed this question.";

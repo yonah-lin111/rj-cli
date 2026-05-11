@@ -112,6 +112,27 @@ const renderDiff = (diff: string): string[] =>
     return `  ${theme.diffContext(line)}`;
   });
 
+const toolDisplayName = (entry: ToolCallEntry): string => {
+  const [firstWord] = entry.callLabel.trim().split(/\s+/, 1);
+  if (firstWord) return firstWord;
+  return entry.name;
+};
+
+const toolDetailText = (entry: ToolCallEntry, displayName: string): string => {
+  if (entry.status !== "running" && (entry.name === "write_file" || entry.name === "edit_file") && entry.resultLabel) {
+    return entry.resultLabel;
+  }
+  const callLabel = entry.callLabel.trim();
+  const prefix = `${displayName} `;
+  if (callLabel.startsWith(prefix)) return callLabel.slice(prefix.length);
+  return callLabel;
+};
+
+const shouldShowResultLabel = (entry: ToolCallEntry): boolean => {
+  if (entry.name === "read_file" || entry.name === "write_file" || entry.name === "edit_file") return false;
+  return entry.status !== "running" && !!entry.resultLabel;
+};
+
 /** 渲染单条 tool call 的调用行 */
 const renderToolCall = (entry: ToolCallEntry): string[] => {
   // explore subagent 特殊渲染格式
@@ -129,36 +150,27 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
   }
 
   let indicator: string;
-  if (entry.name === "ask") {
-    if (entry.status === "running") {
-      indicator = theme.askIndicator("Q");
-    } else if (entry.status === "completed") {
-      indicator = theme.askIndicator("Q");
-    } else {
-      indicator = theme.error("Q");
-    }
+  if (entry.status === "error") {
+    indicator = theme.error(entry.name === "ask" ? "Q" : "✗");
+  } else if (entry.name === "ask") {
+    indicator = theme.askIndicator("Q");
   } else if (entry.name === "read_file") {
-    indicator = entry.status === "error" ? theme.error("→") : theme.fileArrow("→");
+    indicator = theme.askIndicator("→");
   } else if (entry.name === "write_file" || entry.name === "edit_file") {
-    indicator = entry.status === "error" ? theme.error("←") : theme.fileArrow("←");
+    indicator = theme.askIndicator("←");
   } else if (entry.name === "bash") {
-    indicator = theme.success("*");
-  } else if (entry.status === "running") {
-    indicator = theme.dim("·");
-  } else if (entry.status === "completed") {
-    indicator = theme.dim("·");
+    indicator = theme.askIndicator("*");
   } else {
-    indicator = theme.error("✗");
+    indicator = theme.askIndicator("·");
   }
-  const label =
-    entry.name === "ask"
-      ? (entry.status === "error" ? theme.error(entry.callLabel) : theme.askLabel(entry.callLabel))
-      : (entry.status === "error" ? theme.error(entry.callLabel) : theme.dim(entry.callLabel));
-  const resultLabel =
-    entry.status !== "running" && entry.resultLabel
-      ? ` ${theme.dim("—")} ${entry.status === "error" ? theme.error(entry.resultLabel) : theme.dim(entry.resultLabel)}`
-      : "";
-  const lines = [`${indicator} ${label}${resultLabel}`];
+  const displayName = toolDisplayName(entry);
+  const nameLabel = entry.status === "error" ? theme.error(displayName) : theme.askLabel(displayName);
+  const detail = toolDetailText(entry, displayName);
+  const resultLabel = shouldShowResultLabel(entry)
+    ? ` ${theme.dim("—")} ${entry.status === "error" ? theme.error(entry.resultLabel!) : theme.dim(entry.resultLabel!)}`
+    : "";
+  const detailLabel = entry.status === "error" ? theme.error(detail) : theme.dim(detail);
+  const lines = [`${indicator} ${nameLabel}`, ` ${theme.dim("⎿")} ${detailLabel}${resultLabel}`];
   if ((entry.name === "write_file" || entry.name === "edit_file") && entry.displayText && entry.status !== "running") {
     lines.push(...renderDiff(entry.displayText));
   }
@@ -222,7 +234,7 @@ const renderSegment = (
       lines.push(...renderToolCall(entry));
       if (entry.name === "ask" && entry.displayText && entry.status === "completed") {
         for (const line of entry.displayText.split("\n")) {
-          lines.push(theme.dim(`  ${line}`));
+          lines.push(theme.dim(`   ${line}`));
         }
       }
     }
@@ -288,6 +300,13 @@ export const formatMessage = (message: Message, width = 80): string[] => {
   return applyMessageStyle(message.compact ? limitLines(lines, 3) : lines, message);
 };
 
+const wrapMessageLine = (line: string, width: number): string[] => {
+  const wrapWidth = Math.max(20, width - 2);
+  const wrapped = wrapTextWithAnsi(line, wrapWidth);
+  if (!line.trimStart().startsWith("⎿") || wrapped.length <= 1) return wrapped;
+  return wrapped.map((part, index) => index === 0 ? part : `   ${part}`);
+};
+
 /** 消息列表视图组件，最多渲染最近 maxRendered 条消息 */
 export class MessagesView implements Component {
   constructor(
@@ -312,7 +331,7 @@ export class MessagesView implements Component {
       }
 
       for (const part of formatMessage(message, width)) {
-        const wrapped = wrapTextWithAnsi(part, Math.max(20, width - 2));
+        const wrapped = wrapMessageLine(part, width);
         for (const line of wrapped)
           lines.push(` ${truncateToWidth(line, width - 1, "...")}`);
       }
