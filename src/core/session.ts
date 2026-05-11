@@ -26,11 +26,17 @@ const ensureDir = (): void => {
   mkdirSync(sessionsDir, { recursive: true });
 };
 
+const ensureSafeSessionTitle = (title: string): string => {
+  const normalized = title.trim();
+  if (!normalized || normalized.startsWith("/")) return "Untitled";
+  return normalized;
+};
+
 /** 从第一条用户消息提取会话标题（最多30字符） */
 const extractTitle = (uiMessages: Message[]): string => {
   const first = uiMessages.find((m) => m.kind === "user");
   if (!first?.text) return "Untitled";
-  return first.text.slice(0, 30) + (first.text.length > 30 ? "…" : "");
+  return ensureSafeSessionTitle(first.text.slice(0, 30) + (first.text.length > 30 ? "…" : ""));
 };
 
 /** 生成唯一会话 ID */
@@ -50,7 +56,7 @@ export const saveSession = (
   const existing = loadSession(id);
   const record: SessionRecord = {
     id,
-    title: title ?? existing?.title ?? extractTitle(uiMessages),
+    title: ensureSafeSessionTitle(title ?? existing?.title ?? extractTitle(uiMessages)),
     createdAt: existing?.createdAt ?? createdAt.toISOString(),
     updatedAt: new Date().toISOString(),
     sessionMessages,
@@ -80,7 +86,7 @@ export const generateSessionTitle = async (
       ],
     });
     const title = response.choices[0]?.message?.content?.trim();
-    return title || null;
+    return title ? ensureSafeSessionTitle(title) : null;
   } catch {
     return null;
   }
