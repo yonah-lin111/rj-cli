@@ -1,6 +1,7 @@
 import type { Component } from "@mariozechner/pi-tui";
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { theme } from "./theme.ts";
+import type { SubagentSnapshot } from "./subagent-view.ts";
 
 /** 页脚显示状态 */
 export interface FooterState {
@@ -9,6 +10,10 @@ export interface FooterState {
   contextDisplay: string;
   contextPercent: string;
   prompt?: string;
+}
+
+export interface SubagentFooterState {
+  snapshot: SubagentSnapshot;
 }
 
 /**
@@ -22,11 +27,17 @@ const compactPath = (cwd: string): string => {
 
 /** 页脚组件，显示当前模型、上下文用量和工作目录 */
 export class Footer implements Component {
-  constructor(private getState: () => FooterState) {}
+  constructor(
+    private getState: () => FooterState,
+    private getSubagentState: () => SubagentFooterState | undefined = () => undefined,
+  ) {}
 
   invalidate(): void {}
 
   render(width: number): string[] {
+    const subagentState = this.getSubagentState();
+    if (subagentState) return this.renderSubagent(width, subagentState.snapshot);
+
     const state = this.getState();
     const usage = `${state.contextPercent}%/${state.contextDisplay}`;
     const left = theme.dim(`${state.model} (${usage})`);
@@ -47,5 +58,24 @@ export class Footer implements Component {
     const lines = [stats];
     if (state.prompt) lines.push(theme.systemPrompt(truncateToWidth(state.prompt, width, theme.dim("..."))));
     return lines;
+  }
+
+  private renderSubagent(width: number, snapshot: SubagentSnapshot): string[] {
+    const statusIcon =
+      snapshot.status === "running"
+        ? theme.accent("●")
+        : snapshot.status === "error"
+          ? theme.error("✗")
+          : theme.success("✓");
+    const status = `${statusIcon} ${snapshot.status}`;
+    const left = theme.dim(`${snapshot.agentName} subagent (${status})`);
+    const right = theme.dim("esc close");
+    const leftWidth = visibleWidth(left);
+    const rightWidth = visibleWidth(right);
+
+    if (leftWidth + rightWidth + 2 <= width) {
+      return [`${left}${" ".repeat(width - leftWidth - rightWidth)}${right}`];
+    }
+    return [truncateToWidth(left, width, theme.dim("..."))];
   }
 }

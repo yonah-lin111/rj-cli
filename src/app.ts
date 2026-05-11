@@ -14,7 +14,7 @@ import {
 import { AppState, createInitialState } from "./core/state.ts";
 import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./core/commands.ts";
 import { Footer } from "./ui/footer.ts";
-import { headerText } from "./ui/header.ts";
+import { headerText, subagentHeaderText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
 import { AskPrompt } from "./ui/ask-prompt.ts";
@@ -25,7 +25,7 @@ import { expandAtMentions } from "./tools/base/file-reader.ts";
 import { RJAutocompleteProvider } from "./utils/autocomplete.ts";
 import { buildSystemPrompt } from "./prompts/system.ts";
 import { generateSessionId, saveSession, loadSession, listSessions, generateSessionTitle, type SessionRecord } from "./core/session.ts";
-import { SubagentView, createSubagentSnapshot, type SubagentSnapshot } from "./ui/subagent-view.ts";
+import { createSubagentSnapshot, type SubagentSnapshot } from "./ui/subagent-view.ts";
 import { runSubagent } from "./subagent/runner.ts";
 import type { RJSubagentConfig } from "./core/config.ts";
 
@@ -37,14 +37,15 @@ export class RJApp {
   private terminal = new ProcessTerminal();
   private tui = new TUI(this.terminal);
   private root = new Container();
+  private header = new Text(headerText(), 1, 0);
   private chat = new Container();
   private status = new Container();
+  private input = new Container();
   private loadingAnimation?: Loader;
   private todoLoadingTimer?: NodeJS.Timeout;
   private modelSelector?: ModelSelector;
   private sessionSelector?: SessionSelector;
   private askPrompt?: AskPrompt;
-  private subagentView?: SubagentView;
   /** 所有 subagent 执行快照，按 subagentId 索引，用于 ctrl+o 重新打开 */
   private subagentSnapshots = new Map<string, SubagentSnapshot>();
   /** 当前 ctrl+o 打开的 subagentId */
@@ -85,13 +86,18 @@ export class RJApp {
 
   private setupLayout(): void {
     this.root.addChild(new Spacer(1));
-    this.root.addChild(new Text(headerText(), 1, 0));
+    this.root.addChild(this.header);
     this.root.addChild(new Spacer(1));
     this.root.addChild(this.chat);
     this.root.addChild(this.status);
-    this.root.addChild(new Spacer(1));
-    this.root.addChild(this.editor);
-    this.root.addChild(new Footer(() => this.state));
+    this.root.addChild(this.input);
+    this.root.addChild(new Footer(
+      () => this.state,
+      () => {
+        const snapshot = this.openSubagentId ? this.subagentSnapshots.get(this.openSubagentId) : undefined;
+        return snapshot ? { snapshot } : undefined;
+      },
+    ));
 
     this.tui.addChild(this.root);
     this.tui.setFocus(this.editor);
@@ -147,7 +153,7 @@ export class RJApp {
         this.askPrompt.handleInput(data);
         return { consume: true };
       }
-      if (this.subagentView) {
+      if (this.openSubagentId) {
         this.closeSubagentViewFromEscape();
         return { consume: true };
       }
@@ -843,9 +849,6 @@ export class RJApp {
     const pendingEntries = new Map<string, ToolCallEntry>();
     const pendingSpinners = new Map<string, NodeJS.Timeout>();
 
-    const getView = (): SubagentView | undefined =>
-      this.openSubagentId === subagentId ? this.subagentView : undefined;
-
     try {
       const result = await runSubagent(
         agent,
@@ -871,7 +874,6 @@ export class RJApp {
               subagentSegment.text += delta.content;
               snapshot.fullOutput += delta.content;
             }
-            getView()?.invalidate();
             this.requestRender();
           },
           onToolCall: (callId, toolName, callLabel) => {
@@ -881,11 +883,9 @@ export class RJApp {
             pendingEntries.set(callId, entry);
             const timer = setInterval(() => {
               entry.spinnerFrame = ((entry.spinnerFrame ?? 0) + 1) % 10;
-              getView()?.invalidate();
               this.requestRender();
             }, 80);
             pendingSpinners.set(callId, timer);
-            getView()?.invalidate();
             this.requestRender();
           },
           onToolResult: (callId, label, isError) => {
@@ -897,7 +897,6 @@ export class RJApp {
             }
             const timer = pendingSpinners.get(callId);
             if (timer) { clearInterval(timer); pendingSpinners.delete(callId); }
-            getView()?.invalidate();
             this.requestRender();
           },
           onSummaryTurn: () => {
@@ -907,13 +906,11 @@ export class RJApp {
             snapshot.messages.push(subagentAssistant);
             subagentSegment = { text: "" };
             subagentAssistant.segments!.push(subagentSegment);
-            getView()?.invalidate();
             this.requestRender();
           },
           onSummaryDelta: (delta) => {
             if (!subagentSegment) return;
             if (delta.content) subagentSegment.text += delta.content;
-            getView()?.invalidate();
             this.requestRender();
           },
         },
@@ -929,7 +926,6 @@ export class RJApp {
       snapshot.title = result.title;
       toolEntry.callLabel = result.title || task.slice(0, 60);
       toolEntry.resultLabel = `${result.toolEntries.length} files read`;
-      getView()?.markDone(result.title);
       this.requestRender();
       return result.summary;
     } catch (err) {
@@ -939,15 +935,15 @@ export class RJApp {
       snapshot.status = "error";
       snapshot.errorMessage = msg;
       toolEntry.resultLabel = msg.slice(0, 40);
-      getView()?.markError(msg);
+      snapshot.messages.push({ kind: "error", text: msg, label: "error" });
       this.requestRender();
       return `Explore failed: ${msg}`;
     }
   }
 
-  /** ctrl+o：全屏打开最近一个 explore subagent 详情 */
+  /** ctrl+o：在主消息列表位置打开最近一个 explore subagent 详情 */
   private openSubagentView(): void {
-    if (this.subagentView) return;
+    if (this.openSubagentId) return;
 
     // 从 assistant 消息的 toolCalls 中找最近一个 explore entry
     let targetId: string | undefined;
@@ -972,13 +968,7 @@ export class RJApp {
     if (!snapshot) return;
 
     this.openSubagentId = targetId;
-    const view = new SubagentView(snapshot, () => {
-      this.closeSubagentViewFromEscape();
-    });
-    this.subagentView = view;
-    this.tui.clear();
-    this.tui.addChild(view);
-    this.tui.setFocus(view);
+    this.tui.setFocus(null);
     this.requestRender();
   }
 
@@ -990,10 +980,6 @@ export class RJApp {
 
   private closeSubagentView(): void {
     this.openSubagentId = undefined;
-    this.subagentView = undefined;
-    // 恢复正常布局
-    this.tui.clear();
-    this.tui.addChild(this.root);
     this.tui.setFocus(this.editor);
   }
 
@@ -1032,13 +1018,21 @@ export class RJApp {
   }
 
   private refreshChat(): void {
+    const subagentSnapshot = this.openSubagentId ? this.subagentSnapshots.get(this.openSubagentId) : undefined;
+    this.header.setText(subagentSnapshot ? subagentHeaderText(subagentSnapshot) : headerText());
+    this.input.clear();
+    if (!subagentSnapshot) {
+      this.input.addChild(new Spacer(1));
+      this.input.addChild(this.editor);
+    }
     this.chat.clear();
     if (this.modelSelector) {
       this.chat.addChild(this.modelSelector);
     } else if (this.sessionSelector) {
       this.chat.addChild(this.sessionSelector);
     } else {
-      this.chat.addChild(new MessagesView(() => this.messages));
+      const messages = subagentSnapshot ? subagentSnapshot.messages : this.messages;
+      this.chat.addChild(new MessagesView(() => messages));
       if (this.askPrompt) {
         this.chat.addChild(new Spacer(1));
         this.chat.addChild(this.askPrompt);
