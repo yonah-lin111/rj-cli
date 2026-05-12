@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Search, Save, Minus, ChevronDown, ChevronUp } from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"];
 
@@ -198,7 +199,7 @@ export default function CirclePage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => { setPage(1); void loadCircles(1, pageSize, currentFilters); }}>查询</Button>
+              <Button onClick={() => { setPage(1); void loadCircles(1, pageSize, currentFilters); }}><Search className="w-4 h-4 mr-1.5" />查询</Button>
             </div>
 
             <div className="text-sm text-muted-foreground mb-2 h-5">
@@ -266,7 +267,7 @@ export default function CirclePage() {
                   {worksStatus.type === "loading" ? "加载中..." : (worksStatus.msg ?? "")}
                 </span>
                 <Button variant="outline" size="sm" onClick={() => setShowWorksDetails((v) => !v)}>
-                  {showWorksDetails ? "隐藏详情" : "显示详情"}
+                  {showWorksDetails ? <><ChevronUp className="w-4 h-4 mr-1.5" />隐藏详情</> : <><ChevronDown className="w-4 h-4 mr-1.5" />显示详情</>}
                 </Button>
               </div>
 
@@ -327,7 +328,7 @@ export default function CirclePage() {
                           <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{w.added_at ?? "-"}</TableCell>
                         )}
                         <TableCell>
-                          <Button size="sm" variant="destructive" onClick={() => void handleRemoveWork(w.rj_code)}>移除</Button>
+                          <Button size="sm" variant="destructive" onClick={() => void handleRemoveWork(w.rj_code)}><Minus className="w-3.5 h-3.5 mr-1" />移除</Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -377,8 +378,8 @@ export default function CirclePage() {
                   <Textarea value={editRemark} onChange={(e) => setEditRemark(e.target.value)} placeholder="备注（可选）" rows={3} />
                 </div>
                 <div className="flex gap-2">
-                  <Button className="flex-1" onClick={() => void handleUpdateCircle()} disabled={detailStatus.type === "loading"}>保存</Button>
-                  <Button variant="destructive" onClick={() => void handleRemoveCircle()}>移除</Button>
+                  <Button className="flex-1" onClick={() => void handleUpdateCircle()} disabled={detailStatus.type === "loading"}><Save className="w-4 h-4 mr-1.5" />保存</Button>
+                  <Button variant="destructive" onClick={() => void handleRemoveCircle()}><Minus className="w-4 h-4 mr-1.5" />移除</Button>
                 </div>
               </div>
             )}

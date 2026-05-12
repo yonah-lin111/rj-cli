@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Plus, Minus, RotateCcw, Search, ChevronDown, ChevronUp } from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = [
   "5",
@@ -291,9 +292,9 @@ export default function RankPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => triggerSearch(1)}>查询</Button>
+          <Button onClick={() => triggerSearch(1)}><Search className="w-4 h-4 mr-1.5" />查询</Button>
           <Button variant="outline" onClick={handleReset}>
-            重置
+            <RotateCcw className="w-4 h-4 mr-1.5" />重置
           </Button>
         </div>
 
@@ -309,7 +310,7 @@ export default function RankPage() {
             size="sm"
             onClick={() => setShowDetails((v) => !v)}
           >
-            {showDetails ? "隐藏详情" : "显示详情"}
+          {showDetails ? <><ChevronUp className="w-4 h-4 mr-1.5" />隐藏详情</> : <><ChevronDown className="w-4 h-4 mr-1.5" />显示详情</>}
           </Button>
         </div>
 
@@ -439,7 +440,7 @@ export default function RankPage() {
                             )
                           }
                         >
-                          {rjExists ? "移除 RJ" : "添加 RJ"}
+                          {rjExists ? <><Minus className="w-3.5 h-3.5 mr-1" />移除 RJ</> : <><Plus className="w-3.5 h-3.5 mr-1" />添加 RJ</>}
                         </Button>
                         {item.circle && (
                           <Button
@@ -457,7 +458,7 @@ export default function RankPage() {
                               )
                             }
                           >
-                            {circleExists ? "移除社团" : "添加社团"}
+                            {circleExists ? <><Minus className="w-3.5 h-3.5 mr-1" />移除社团</> : <><Plus className="w-3.5 h-3.5 mr-1" />添加社团</>}
                           </Button>
                         )}
                       </div>
