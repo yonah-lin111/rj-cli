@@ -435,6 +435,76 @@ export const getCircleLatestWorksTool = async (args: CircleLatestWorksArgs): Pro
   }
 };
 
+export interface AddRjFromLatestWorkArgs {
+  rj_code: string;
+  title: string;
+  title_url: string | null;
+  thumbnail: string | null;
+  release_date: string | null;
+  is_all_ages: boolean;
+  circle_name: string;
+}
+
+export const addRjFromLatestWorkTool = async (args: AddRjFromLatestWorkArgs): Promise<RjServerToolResult> => {
+  try {
+    const rjCode = normalizeRjCode(args.rj_code);
+    if (!rjCode) return { content: "RJ号不能为空", resultLabel: "error", isError: true };
+
+    const db = openDb(false);
+    const exists = db.prepare("SELECT 1 FROM rj WHERE rj_code = ?").get(rjCode);
+    if (exists) {
+      db.close();
+      return { content: JSON.stringify({ rj_code: rjCode, added: false, exists: true }, null, 2), resultLabel: `RJ exists ${rjCode}`, isError: false };
+    }
+
+    const circleRow = db.prepare("SELECT circle_url FROM circle WHERE name = ? LIMIT 1").get(args.circle_name) as { circle_url: string | null } | undefined;
+
+    let detail: Partial<{ circle: string; circle_url: string | null; cv: string | null; tags: string[]; is_all_ages: boolean }> = {
+      circle: args.circle_name,
+      circle_url: circleRow?.circle_url ?? null,
+      cv: null,
+      tags: [],
+      is_all_ages: args.is_all_ages,
+    };
+
+    if (args.title_url) {
+      const scraped = await scrapeWorkDetail(args.title_url);
+      if (scraped) {
+        detail = {
+          circle: scraped.circle ?? args.circle_name,
+          circle_url: scraped.circle_url ?? circleRow?.circle_url ?? null,
+          cv: scraped.cv ?? null,
+          tags: scraped.tags ?? [],
+          is_all_ages: scraped.is_all_ages ?? args.is_all_ages,
+        };
+      }
+    }
+
+    db.prepare(`
+      INSERT INTO rj (rj_code, title, title_url, circle, circle_url, cv, tags, is_all_ages, release_date, thumbnail, source, status)
+      VALUES (@rj_code, @title, @title_url, @circle, @circle_url, @cv, @tags, @is_all_ages, @release_date, @thumbnail, @source, @status)
+    `).run({
+      rj_code: rjCode,
+      title: args.title,
+      title_url: args.title_url,
+      circle: detail.circle,
+      circle_url: detail.circle_url,
+      cv: detail.cv,
+      tags: serializeTags(detail.tags ?? []),
+      is_all_ages: detail.is_all_ages ? 1 : 0,
+      release_date: args.release_date,
+      thumbnail: args.thumbnail,
+      source: "circle:latest",
+      status: 0,
+    });
+    db.close();
+
+    return { content: JSON.stringify({ rj_code: rjCode, added: true }, null, 2), resultLabel: `RJ added ${rjCode}`, isError: false };
+  } catch (err) {
+    return { content: `入库失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
 // ── 本地 RJ 查询 ─────────────────────────────────────────────────────────────
 
 export interface RjQueryArgs {

@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Save, Minus, X, ChevronDown, ChevronUp, Clock, Database, Pencil, Trash2 } from "lucide-react";
+import { Search, Save, Minus, X, ChevronDown, ChevronUp, Clock, Database, Pencil, Trash2, Plus, Check } from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"];
 
@@ -62,6 +62,8 @@ export default function CirclePage() {
   // latest-works modal state
   const [latestWorks, setLatestWorks] = useState<CircleLatestWork[]>([]);
   const [latestStatus, setLatestStatus] = useState<{ type: "idle" | "loading" | "error" | "ok"; msg?: string }>({ type: "idle" });
+  const [latestExistsMap, setLatestExistsMap] = useState<Record<string, boolean>>({});
+  const [addingRj, setAddingRj] = useState<Record<string, boolean>>({});
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -117,10 +119,17 @@ export default function CirclePage() {
     setModal({ type: "latest-works", circleName });
     setLatestStatus({ type: "loading" });
     setLatestWorks([]);
+    setLatestExistsMap({});
+    setAddingRj({});
     try {
       const data = await fetchCircleLatestWorks(circleName, 20);
       setLatestWorks(data.items);
       setLatestStatus({ type: "ok", msg: `共 ${data.items.length} 条` });
+      if (data.items.length > 0) {
+        const codes = data.items.map((w) => w.rj_code);
+        const res = await postJson<{ exists: Record<string, boolean> }>("/api/rj/check", { rj_codes: codes });
+        setLatestExistsMap(res.exists ?? {});
+      }
     } catch (err) {
       setLatestStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
     }
@@ -189,6 +198,27 @@ export default function CirclePage() {
       void loadWorks(modal.circleName, worksPage, worksPageSize, worksRjCode, worksTitle);
     } catch (err) {
       setWorksStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  const handleAddLatestWork = async (w: CircleLatestWork) => {
+    if (!modal.circleName) return;
+    setAddingRj((prev) => ({ ...prev, [w.rj_code]: true }));
+    try {
+      await postJson("/api/circle/latest-works/add", {
+        rj_code: w.rj_code,
+        title: w.title,
+        title_url: w.title_url,
+        thumbnail: w.thumbnail,
+        release_date: w.release_date,
+        is_all_ages: w.is_all_ages,
+        circle_name: modal.circleName,
+      });
+      setLatestExistsMap((prev) => ({ ...prev, [w.rj_code]: true }));
+    } catch (err) {
+      setLatestStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setAddingRj((prev) => ({ ...prev, [w.rj_code]: false }));
     }
   };
 
@@ -328,10 +358,11 @@ export default function CirclePage() {
                           <TableHead>标题</TableHead>
                           <TableHead>发售日</TableHead>
                           <TableHead className="w-20">分级</TableHead>
+                          <TableHead className="w-24">操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {latestWorks.map((w) => (
+                        {latestStatus.type !== "loading" && latestWorks.map((w) => (
                           <TableRow key={w.rj_code}>
                             <TableCell>
                               {w.thumbnail
@@ -354,11 +385,23 @@ export default function CirclePage() {
                                 {w.is_all_ages ? "全年龄" : "R18"}
                               </Badge>
                             </TableCell>
+                            <TableCell>
+                              {latestExistsMap[w.rj_code]
+                                ? <Button size="sm" variant="outline" disabled><Check className="w-3.5 h-3.5 mr-1" />已入库</Button>
+                                : <Button size="sm" variant="outline" disabled={addingRj[w.rj_code]} onClick={() => void handleAddLatestWork(w)}>
+                                    <Plus className="w-3.5 h-3.5 mr-1" />{addingRj[w.rj_code] ? "入库中..." : "入库"}
+                                  </Button>}
+                            </TableCell>
                           </TableRow>
                         ))}
-                        {latestWorks.length === 0 && latestStatus.type !== "loading" && (
+                        {latestStatus.type !== "loading" && latestWorks.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8">暂无作品</TableCell>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">暂无作品</TableCell>
+                          </TableRow>
+                        )}
+                        {latestStatus.type === "loading" && (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">加载中...</TableCell>
                           </TableRow>
                         )}
                       </TableBody>

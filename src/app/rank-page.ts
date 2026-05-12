@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getRankingTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, getCircleLatestWorksTool } from "../tools/rj-server/index.ts";
+import { getRankingTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, getCircleLatestWorksTool, addRjFromLatestWorkTool } from "../tools/rj-server/index.ts";
 import type { RankSelection } from "../ui/rank-selector.ts";
 
 const IS_DEV = process.env.RJ_WEB_DEV === "1";
@@ -71,6 +71,11 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (url.pathname === "/api/circle/latest-works") {
     await sendCircleLatestWorksData(url, res);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/circle/latest-works/add") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => addRjFromLatestWorkTool(body as unknown as Parameters<typeof addRjFromLatestWorkTool>[0]));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/rj/check") {

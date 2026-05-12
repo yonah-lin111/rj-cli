@@ -147,21 +147,17 @@ export interface CircleWorkItem {
 
 export const scrapeCircleLatestWorks = async (circleUrl: string, limit = 10): Promise<CircleWorkItem[]> => {
   try {
-    const rgMatch = circleUrl.match(/maker_id[=/]+(RG\d+)/i);
-    if (!rgMatch) return [];
-    const rgId = rgMatch[1];
-    const searchUrl = `https://www.dlsite.com/maniax/fsr/=/language/jp/sex_category[0]/male/work_category[0]/doujin/order[0]/release_d/options_and_or/and/maker_id/${rgId}/per_page/${limit}/page/1/show_type/1.html`;
-    const res = await proxyFetch(searchUrl);
+    const res = await proxyFetch(circleUrl);
     if (!res.ok) return [];
     const html = await res.text();
     const root = parse(html);
     const items: CircleWorkItem[] = [];
-    const rows = root.querySelectorAll("table.work_1col_table tr");
+    const rows = root.querySelectorAll(".n_worklist li[data-list_item_product_id]");
     for (const row of rows) {
       if (items.length >= limit) break;
       const rjCode = row.getAttribute("data-list_item_product_id");
       if (!rjCode) continue;
-      const titleLink = row.querySelector("dt.work_name a");
+      const titleLink = row.querySelector(".work_name a");
       if (!titleLink) continue;
       const href = titleLink.getAttribute("href") ?? "";
       const titleUrl = href ? (href.startsWith("/") ? `https://www.dlsite.com${href}` : href) : null;
@@ -174,7 +170,7 @@ export const scrapeCircleLatestWorks = async (circleUrl: string, limit = 10): Pr
       const isAllAges = !!row.querySelector("span.icon_GEN");
       items.push({
         rj_code: rjCode,
-        title: titleLink.text.trim(),
+        title: titleLink.getAttribute("title")?.trim() || titleLink.text.trim(),
         title_url: titleUrl,
         thumbnail: buildThumbnailUrl(rjCode),
         release_date: releaseDate,
