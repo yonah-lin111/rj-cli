@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getRankingTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool } from "../tools/rj-server/index.ts";
+import { getRankingTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, getCircleLatestWorksTool } from "../tools/rj-server/index.ts";
 import type { RankSelection } from "../ui/rank-selector.ts";
 
 const IS_DEV = process.env.RJ_WEB_DEV === "1";
@@ -67,6 +67,10 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (url.pathname === "/api/circle/works") {
     sendCircleWorksData(url, res);
+    return;
+  }
+  if (url.pathname === "/api/circle/latest-works") {
+    await sendCircleLatestWorksData(url, res);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/rj/check") {
@@ -169,6 +173,17 @@ const sendCircleWorksData = (url: URL, res: ServerResponse): void => {
     rj_code: url.searchParams.get("rj_code")?.trim() || undefined,
     title: url.searchParams.get("title")?.trim() || undefined,
   });
+  if (result.isError) {
+    sendJson(res, { error: result.content }, 500);
+    return;
+  }
+  sendJson(res, JSON.parse(result.content));
+};
+
+const sendCircleLatestWorksData = async (url: URL, res: ServerResponse): Promise<void> => {
+  const circleName = url.searchParams.get("circle_name")?.trim() || "";
+  const limit = parsePositiveInt(url.searchParams.get("limit"), 10, 1, 20);
+  const result = await getCircleLatestWorksTool({ circle_name: circleName, limit });
   if (result.isError) {
     sendJson(res, { error: result.content }, 500);
     return;

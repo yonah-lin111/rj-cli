@@ -66,3 +66,19 @@ export interface CircleWorksResponse {
   page_size: number;
   data: CircleWork[];
 }
+
+export interface CircleLatestWork {
+  rj_code: string;
+  title: string;
+  title_url: string | null;
+  thumbnail: string | null;
+  release_date: string | null;
+  is_all_ages: boolean;
+}
+
+export interface CircleLatestWorksResponse {
+  circle_name: string;
+  circle_url: string;
+  total: number;
+  items: CircleLatestWork[];
+}

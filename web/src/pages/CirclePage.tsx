@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchCircleList, fetchCircleDetail, fetchCircleWorks, postJson } from "@/lib/api";
-import type { CircleItem, CircleDetail, CircleWork } from "@/types";
+import { fetchCircleList, fetchCircleWorks, fetchCircleLatestWorks, postJson } from "@/lib/api";
+import type { CircleItem, CircleDetail, CircleWork, CircleLatestWork } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Save, Minus, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Save, Minus, X, ChevronDown, ChevronUp, Clock, Database, Pencil, Trash2 } from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"];
 
@@ -19,6 +19,13 @@ function getInitialParams() {
     nickname: p.get("nickname") ?? "",
     remark: p.get("remark") ?? "",
   };
+}
+
+type ModalType = "latest-works" | "db-works" | "edit" | null;
+
+interface ModalState {
+  type: ModalType;
+  circleName: string;
 }
 
 export default function CirclePage() {
@@ -33,13 +40,16 @@ export default function CirclePage() {
   const [circles, setCircles] = useState<CircleItem[]>([]);
   const [listStatus, setListStatus] = useState<{ type: "idle" | "loading" | "error" | "ok"; msg?: string }>({ type: "idle" });
 
-  const [selectedCircle, setSelectedCircle] = useState<string | null>(null);
-  const [detail, setDetail] = useState<CircleDetail | null>(null);
+  const [modal, setModal] = useState<ModalState>({ type: null, circleName: "" });
+
+  // edit modal state
+  const [editDetail, setEditDetail] = useState<CircleDetail | null>(null);
   const [editNickname, setEditNickname] = useState("");
   const [editUrl, setEditUrl] = useState("");
   const [editRemark, setEditRemark] = useState("");
-  const [detailStatus, setDetailStatus] = useState<{ type: "idle" | "loading" | "error" | "ok"; msg?: string }>({ type: "idle" });
+  const [editStatus, setEditStatus] = useState<{ type: "idle" | "loading" | "error" | "ok"; msg?: string }>({ type: "idle" });
 
+  // db-works modal state
   const [worksPage, setWorksPage] = useState(1);
   const [worksPageSize] = useState("20");
   const [worksRjCode, setWorksRjCode] = useState("");
@@ -48,6 +58,10 @@ export default function CirclePage() {
   const [works, setWorks] = useState<CircleWork[]>([]);
   const [worksStatus, setWorksStatus] = useState<{ type: "idle" | "loading" | "error" | "ok"; msg?: string }>({ type: "idle" });
   const [showWorksDetails, setShowWorksDetails] = useState(false);
+
+  // latest-works modal state
+  const [latestWorks, setLatestWorks] = useState<CircleLatestWork[]>([]);
+  const [latestStatus, setLatestStatus] = useState<{ type: "idle" | "loading" | "error" | "ok"; msg?: string }>({ type: "idle" });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -99,60 +113,80 @@ export default function CirclePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectCircle = async (circleName: string) => {
-    setSelectedCircle(circleName);
-    setDetailStatus({ type: "loading" });
+  const openLatestWorks = async (circleName: string) => {
+    setModal({ type: "latest-works", circleName });
+    setLatestStatus({ type: "loading" });
+    setLatestWorks([]);
+    try {
+      const data = await fetchCircleLatestWorks(circleName, 20);
+      setLatestWorks(data.items);
+      setLatestStatus({ type: "ok", msg: `共 ${data.items.length} 条` });
+    } catch (err) {
+      setLatestStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  const openDbWorks = (circleName: string) => {
+    setModal({ type: "db-works", circleName });
     setWorksPage(1);
     setWorksRjCode("");
     setWorksTitle("");
-    try {
-      const d = await fetchCircleDetail(circleName);
-      setDetail(d);
-      setEditNickname(d.nickname ?? "");
-      setEditUrl(d.circle_url ?? "");
-      setEditRemark(d.remark ?? "");
-      setDetailStatus({ type: "ok" });
-    } catch (err) {
-      setDetailStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
-    }
     void loadWorks(circleName, 1, worksPageSize, "", "");
   };
 
+  const openEdit = async (circleName: string) => {
+    setModal({ type: "edit", circleName });
+    setEditStatus({ type: "loading" });
+    setEditDetail(null);
+    try {
+      const q = new URLSearchParams({ name: circleName });
+      const res = await fetch(`/api/circle/detail?${q}`);
+      const d = (await res.json()) as CircleDetail & { error?: string };
+      if (!res.ok) throw new Error(d.error ?? "加载失败");
+      setEditDetail(d);
+      setEditNickname(d.nickname ?? "");
+      setEditUrl(d.circle_url ?? "");
+      setEditRemark(d.remark ?? "");
+      setEditStatus({ type: "ok" });
+    } catch (err) {
+      setEditStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  const closeModal = () => setModal({ type: null, circleName: "" });
+
   const handleUpdateCircle = async () => {
-    if (!selectedCircle) return;
-    setDetailStatus({ type: "loading" });
+    if (!modal.circleName) return;
+    setEditStatus({ type: "loading" });
     try {
       await postJson("/api/circle/update", {
-        name: selectedCircle,
+        name: modal.circleName,
         nickname: editNickname.trim() || null,
         circle_url: editUrl.trim() || null,
         remark: editRemark.trim() || null,
       });
-      setDetailStatus({ type: "ok", msg: "保存成功" });
+      setEditStatus({ type: "ok", msg: "保存成功" });
       void loadCircles(page, pageSize, currentFilters);
     } catch (err) {
-      setDetailStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
+      setEditStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
     }
   };
 
-  const handleRemoveCircle = async () => {
-    if (!selectedCircle) return;
-    if (!confirm(`确认移除社团「${selectedCircle}」？`)) return;
+  const handleDeleteCircle = async (circleName: string) => {
+    if (!confirm(`确认删除社团「${circleName}」？`)) return;
     try {
-      await postJson("/api/circle/remove", { name: selectedCircle });
-      setSelectedCircle(null);
-      setDetail(null);
+      await postJson("/api/circle/remove", { name: circleName });
       void loadCircles(page, pageSize, currentFilters);
     } catch (err) {
-      setDetailStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
+      setListStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
     }
   };
 
   const handleRemoveWork = async (rjCode: string) => {
-    if (!selectedCircle) return;
+    if (!modal.circleName) return;
     try {
-      await postJson("/api/circle/work/remove", { circle_name: selectedCircle, rj_code: rjCode });
-      void loadWorks(selectedCircle, worksPage, worksPageSize, worksRjCode, worksTitle);
+      await postJson("/api/circle/work/remove", { circle_name: modal.circleName, rj_code: rjCode });
+      void loadWorks(modal.circleName, worksPage, worksPageSize, worksRjCode, worksTitle);
     } catch (err) {
       setWorksStatus({ type: "error", msg: err instanceof Error ? err.message : String(err) });
     }
@@ -169,223 +203,299 @@ export default function CirclePage() {
   return (
     <div className="min-h-screen bg-background p-6">
       <h1 className="text-2xl font-bold mb-5 text-foreground">社团管理</h1>
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4 items-start">
 
-        {/* Left column */}
-        <div className="flex flex-col gap-4">
-
-          {/* Circle list */}
-          <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
-            <h2 className="text-base font-semibold mb-4 text-card-foreground">社团列表</h2>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3 items-end">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-muted-foreground">社团名</label>
-                <Input placeholder="模糊查询" value={name} onChange={(e) => { setName(e.target.value); debouncedSearch(); }} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-muted-foreground">别名</label>
-                <Input placeholder="模糊查询" value={nickname} onChange={(e) => { setNickname(e.target.value); debouncedSearch(); }} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-muted-foreground">备注</label>
-                <Input placeholder="模糊查询" value={remark} onChange={(e) => { setRemark(e.target.value); debouncedSearch(); }} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-muted-foreground">每页</label>
-                <Select value={pageSize} onValueChange={(v) => { setPageSize(v); setPage(1); void loadCircles(1, v, currentFilters); }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button onClick={() => { setPage(1); void loadCircles(1, pageSize, currentFilters); }}><Search className="w-4 h-4 mr-1.5" />查询</Button>
-            </div>
-
-            <div className="text-sm text-muted-foreground mb-2 h-5">
-              {listStatus.type === "loading" ? "加载中..." : listStatus.type === "error"
-                ? <span className="text-destructive">{listStatus.msg}</span>
-                : listStatus.msg}
-            </div>
-
-            <div className="rounded-lg border border-border overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>社团名</TableHead>
-                    <TableHead>别名</TableHead>
-                    <TableHead className="w-16">RJ数</TableHead>
-                    <TableHead>备注</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {circles.map((c) => (
-                    <TableRow
-                      key={c.name}
-                      className={`cursor-pointer ${selectedCircle === c.name ? "bg-accent text-accent-foreground" : ""}`}
-                      onClick={() => void selectCircle(c.name)}
-                    >
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{c.nickname ?? "-"}</TableCell>
-                      <TableCell className="text-muted-foreground">{c.rj_count ?? "-"}</TableCell>
-                      <TableCell className="text-muted-foreground max-w-[200px] truncate">{c.remark ?? "-"}</TableCell>
-                    </TableRow>
-                  ))}
-                  {circles.length === 0 && listStatus.type !== "loading" && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">暂无数据</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 mt-3 text-sm text-muted-foreground">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => { setPage((p) => p - 1); void loadCircles(page - 1, pageSize, currentFilters); }}>上一页</Button>
-              <span>{page} / {pages}</span>
-              <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => { setPage((p) => p + 1); void loadCircles(page + 1, pageSize, currentFilters); }}>下一页</Button>
-            </div>
+      {/* Circle list */}
+      <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
+        <h2 className="text-base font-semibold mb-4 text-card-foreground">社团列表</h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3 items-end">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">社团名</label>
+            <Input placeholder="模糊查询" value={name} onChange={(e) => { setName(e.target.value); debouncedSearch(); }} />
           </div>
-
-          {/* Works panel */}
-          {selectedCircle && (
-            <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
-              <h2 className="text-base font-semibold mb-4 text-card-foreground">「{selectedCircle}」的作品</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 items-end">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-muted-foreground">RJ号</label>
-                  <Input placeholder="筛选" value={worksRjCode} onChange={(e) => { setWorksRjCode(e.target.value); void loadWorks(selectedCircle, 1, worksPageSize, e.target.value, worksTitle); }} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-muted-foreground">标题</label>
-                  <Input placeholder="筛选" value={worksTitle} onChange={(e) => { setWorksTitle(e.target.value); void loadWorks(selectedCircle, 1, worksPageSize, worksRjCode, e.target.value); }} />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-sm h-5 ${worksStatus.type === "error" ? "text-destructive" : "text-muted-foreground"}`}>
-                  {worksStatus.type === "loading" ? "加载中..." : (worksStatus.msg ?? "")}
-                </span>
-                <Button variant="outline" size="sm" onClick={() => setShowWorksDetails((v) => !v)}>
-                  {showWorksDetails ? <><ChevronUp className="w-4 h-4 mr-1.5" />隐藏详情</> : <><ChevronDown className="w-4 h-4 mr-1.5" />显示详情</>}
-                </Button>
-              </div>
-
-              <div className="rounded-lg border border-border overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>RJ号</TableHead>
-                      {showWorksDetails && <TableHead className="w-20">封面</TableHead>}
-                      <TableHead>标题</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>发售日</TableHead>
-                      {showWorksDetails && <TableHead>标签</TableHead>}
-                      {showWorksDetails && <TableHead>来源</TableHead>}
-                      {showWorksDetails && <TableHead>添加时间</TableHead>}
-                      <TableHead className="w-20">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {works.map((w) => (
-                      <TableRow key={w.rj_code}>
-                        <TableCell className="font-medium">
-                          {w.title_url
-                            ? <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{w.rj_code}</a>
-                            : w.rj_code}
-                        </TableCell>
-                        {showWorksDetails && (
-                          <TableCell>
-                            {w.thumbnail ? (
-                              <img src={w.thumbnail} alt={w.rj_code} className="w-14 h-14 object-cover rounded-md bg-muted" />
-                            ) : (
-                              <div className="w-14 h-14 rounded-md bg-muted" />
-                            )}
-                          </TableCell>
-                        )}
-                        <TableCell className="max-w-xs text-sm">
-                          {w.title_url ? (
-                            <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline line-clamp-2">{w.title ?? "-"}</a>
-                          ) : (
-                            <span className="line-clamp-2">{w.title ?? "-"}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{w.status === 0 ? "待下载" : w.status === 1 ? "已下载" : w.status === 2 ? "已删除" : (w.status ?? "-")}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{w.release_date ?? "-"}</TableCell>
-                        {showWorksDetails && (
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1 max-w-[240px]">
-                              {w.tags.map((t) => (
-                                <Badge key={t} variant="secondary">{t}</Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                        )}
-                        {showWorksDetails && (
-                          <TableCell className="text-muted-foreground text-sm">{w.source ?? "-"}</TableCell>
-                        )}
-                        {showWorksDetails && (
-                          <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{w.added_at ?? "-"}</TableCell>
-                        )}
-                        <TableCell>
-                          <Button size="sm" variant="destructive" onClick={() => void handleRemoveWork(w.rj_code)}><Minus className="w-3.5 h-3.5 mr-1" />移除</Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {works.length === 0 && worksStatus.type !== "loading" && (
-                      <TableRow>
-                        <TableCell colSpan={showWorksDetails ? 9 : 5} className="text-center text-muted-foreground py-8">暂无作品</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 mt-3 text-sm text-muted-foreground">
-                <Button variant="outline" size="sm" disabled={worksPage <= 1} onClick={() => { setWorksPage((p) => p - 1); void loadWorks(selectedCircle, worksPage - 1, worksPageSize, worksRjCode, worksTitle); }}>上一页</Button>
-                <span>{worksPage} / {worksPages}</span>
-                <Button variant="outline" size="sm" disabled={worksPage >= worksPages} onClick={() => { setWorksPage((p) => p + 1); void loadWorks(selectedCircle, worksPage + 1, worksPageSize, worksRjCode, worksTitle); }}>下一页</Button>
-              </div>
-            </div>
-          )}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">别名</label>
+            <Input placeholder="模糊查询" value={nickname} onChange={(e) => { setNickname(e.target.value); debouncedSearch(); }} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">备注</label>
+            <Input placeholder="模糊查询" value={remark} onChange={(e) => { setRemark(e.target.value); debouncedSearch(); }} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">每页</label>
+            <Select value={pageSize} onValueChange={(v) => { setPageSize(v); setPage(1); void loadCircles(1, v, currentFilters); }}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={() => { setPage(1); void loadCircles(1, pageSize, currentFilters); }}><Search className="w-4 h-4 mr-1.5" />查询</Button>
         </div>
 
-        {/* Right: detail editor */}
-        {selectedCircle && (
-          <div className="rounded-xl border border-border bg-card p-5 shadow-lg sticky top-6">
-            <h2 className="text-base font-semibold mb-1 text-card-foreground">编辑社团</h2>
-            <p className="text-sm text-muted-foreground mb-4 truncate">{selectedCircle}</p>
+        <div className="text-sm text-muted-foreground mb-2 h-5">
+          {listStatus.type === "loading" ? "加载中..." : listStatus.type === "error"
+            ? <span className="text-destructive">{listStatus.msg}</span>
+            : listStatus.msg}
+        </div>
 
-            {detailStatus.type === "error" && (
-              <p className="text-destructive text-sm mb-3">{detailStatus.msg}</p>
-            )}
-            {detailStatus.type === "ok" && detailStatus.msg && (
-              <p className="text-sm mb-3" style={{ color: "oklch(0.696 0.17 162.48)" }}>{detailStatus.msg}</p>
-            )}
+        <div className="rounded-lg border border-border overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>社团名</TableHead>
+                <TableHead>别名</TableHead>
+                <TableHead className="w-16">RJ数</TableHead>
+                <TableHead>备注</TableHead>
+                <TableHead className="w-64 text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {circles.map((c) => (
+                <TableRow key={c.name}>
+                  <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.nickname ?? "-"}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.rj_count ?? "-"}</TableCell>
+                  <TableCell className="text-muted-foreground max-w-[200px] truncate">{c.remark ?? "-"}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button size="sm" variant="outline" onClick={() => void openLatestWorks(c.name)}>
+                        <Clock className="w-3.5 h-3.5 mr-1" />最近作品
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => openDbWorks(c.name)}>
+                        <Database className="w-3.5 h-3.5 mr-1" />数据库作品
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void openEdit(c.name)}>
+                        <Pencil className="w-3.5 h-3.5 mr-1" />编辑社团
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => void handleDeleteCircle(c.name)}>
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />删除
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {circles.length === 0 && listStatus.type !== "loading" && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">暂无数据</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-            {detail && (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-muted-foreground">别名</label>
-                  <Input value={editNickname} onChange={(e) => setEditNickname(e.target.value)} placeholder="别名（可选）" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-muted-foreground">社团链接</label>
-                  <Input value={editUrl} onChange={(e) => setEditUrl(e.target.value)} placeholder="https://..." />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-muted-foreground">备注</label>
-                  <Textarea value={editRemark} onChange={(e) => setEditRemark(e.target.value)} placeholder="备注（可选）" rows={3} />
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" onClick={() => void handleUpdateCircle()} disabled={detailStatus.type === "loading"}><Save className="w-4 h-4 mr-1.5" />保存</Button>
-                  <Button variant="destructive" onClick={() => void handleRemoveCircle()}><Minus className="w-4 h-4 mr-1.5" />移除</Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="flex items-center justify-end gap-3 mt-3 text-sm text-muted-foreground">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => { setPage((p) => p - 1); void loadCircles(page - 1, pageSize, currentFilters); }}>上一页</Button>
+          <span>{page} / {pages}</span>
+          <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => { setPage((p) => p + 1); void loadCircles(page + 1, pageSize, currentFilters); }}>下一页</Button>
+        </div>
       </div>
+
+      {/* Modal backdrop */}
+      {modal.type && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={closeModal}>
+          <div className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <div>
+                <h2 className="text-base font-semibold text-card-foreground">
+                  {modal.type === "latest-works" && "最近作品"}
+                  {modal.type === "db-works" && "数据库作品"}
+                  {modal.type === "edit" && "编辑社团"}
+                </h2>
+                <p className="text-sm text-muted-foreground truncate">{modal.circleName}</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={closeModal}><X className="w-4 h-4" /></Button>
+            </div>
+
+            {/* Modal body */}
+            <div className="overflow-y-auto flex-1 p-5">
+
+              {/* Latest works */}
+              {modal.type === "latest-works" && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-3 h-5">
+                    {latestStatus.type === "loading" ? "加载中..." : latestStatus.type === "error"
+                      ? <span className="text-destructive">{latestStatus.msg}</span>
+                      : latestStatus.msg}
+                  </div>
+                  <div className="rounded-lg border border-border overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-20">封面</TableHead>
+                          <TableHead>RJ号</TableHead>
+                          <TableHead>标题</TableHead>
+                          <TableHead>发售日</TableHead>
+                          <TableHead className="w-20">分级</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {latestWorks.map((w) => (
+                          <TableRow key={w.rj_code}>
+                            <TableCell>
+                              {w.thumbnail
+                                ? <img src={w.thumbnail} alt={w.rj_code} className="w-14 h-14 object-cover rounded-md bg-muted" />
+                                : <div className="w-14 h-14 rounded-md bg-muted" />}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {w.title_url
+                                ? <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{w.rj_code}</a>
+                                : w.rj_code}
+                            </TableCell>
+                            <TableCell className="max-w-xs text-sm">
+                              {w.title_url
+                                ? <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline line-clamp-2">{w.title}</a>
+                                : <span className="line-clamp-2">{w.title}</span>}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{w.release_date ?? "-"}</TableCell>
+                            <TableCell>
+                              <Badge variant={w.is_all_ages ? "secondary" : "outline"}>
+                                {w.is_all_ages ? "全年龄" : "R18"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {latestWorks.length === 0 && latestStatus.type !== "loading" && (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8">暂无作品</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {/* DB works */}
+              {modal.type === "db-works" && (
+                <div>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-muted-foreground">RJ号</label>
+                      <Input placeholder="筛选" value={worksRjCode} onChange={(e) => { setWorksRjCode(e.target.value); void loadWorks(modal.circleName, 1, worksPageSize, e.target.value, worksTitle); }} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-muted-foreground">标题</label>
+                      <Input placeholder="筛选" value={worksTitle} onChange={(e) => { setWorksTitle(e.target.value); void loadWorks(modal.circleName, 1, worksPageSize, worksRjCode, e.target.value); }} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm h-5 ${worksStatus.type === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                      {worksStatus.type === "loading" ? "加载中..." : (worksStatus.msg ?? "")}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => setShowWorksDetails((v) => !v)}>
+                      {showWorksDetails ? <><ChevronUp className="w-4 h-4 mr-1.5" />隐藏详情</> : <><ChevronDown className="w-4 h-4 mr-1.5" />显示详情</>}
+                    </Button>
+                  </div>
+                  <div className="rounded-lg border border-border overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>RJ号</TableHead>
+                          {showWorksDetails && <TableHead className="w-20">封面</TableHead>}
+                          <TableHead>标题</TableHead>
+                          <TableHead>状态</TableHead>
+                          <TableHead>发售日</TableHead>
+                          {showWorksDetails && <TableHead>标签</TableHead>}
+                          {showWorksDetails && <TableHead>来源</TableHead>}
+                          {showWorksDetails && <TableHead>添加时间</TableHead>}
+                          <TableHead className="w-20">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {works.map((w) => (
+                          <TableRow key={w.rj_code}>
+                            <TableCell className="font-medium">
+                              {w.title_url
+                                ? <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{w.rj_code}</a>
+                                : w.rj_code}
+                            </TableCell>
+                            {showWorksDetails && (
+                              <TableCell>
+                                {w.thumbnail
+                                  ? <img src={w.thumbnail} alt={w.rj_code} className="w-14 h-14 object-cover rounded-md bg-muted" />
+                                  : <div className="w-14 h-14 rounded-md bg-muted" />}
+                              </TableCell>
+                            )}
+                            <TableCell className="max-w-xs text-sm">
+                              {w.title_url
+                                ? <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline line-clamp-2">{w.title ?? "-"}</a>
+                                : <span className="line-clamp-2">{w.title ?? "-"}</span>}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={w.status === 1 ? "default" : w.status === 2 ? "secondary" : "outline"}>
+                                {w.status === 1 ? "已下载" : w.status === 2 ? "已删除" : "未下载"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{w.release_date ?? "-"}</TableCell>
+                            {showWorksDetails && (
+                              <TableCell className="text-sm max-w-[160px]">
+                                <div className="flex flex-wrap gap-1">
+                                  {w.tags.slice(0, 4).map((t) => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}
+                                  {w.tags.length > 4 && <Badge variant="outline" className="text-xs">+{w.tags.length - 4}</Badge>}
+                                </div>
+                              </TableCell>
+                            )}
+                            {showWorksDetails && <TableCell className="text-muted-foreground text-sm">{w.source ?? "-"}</TableCell>}
+                            {showWorksDetails && <TableCell className="text-muted-foreground text-sm">{w.added_at ? w.added_at.slice(0, 10) : "-"}</TableCell>}
+                            <TableCell>
+                              <Button size="sm" variant="destructive" onClick={() => void handleRemoveWork(w.rj_code)}><Minus className="w-3.5 h-3.5 mr-1" />移除</Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {works.length === 0 && worksStatus.type !== "loading" && (
+                          <TableRow>
+                            <TableCell colSpan={showWorksDetails ? 9 : 5} className="text-center text-muted-foreground py-8">暂无作品</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex items-center justify-end gap-3 mt-3 text-sm text-muted-foreground">
+                    <Button variant="outline" size="sm" disabled={worksPage <= 1} onClick={() => { setWorksPage((p) => p - 1); void loadWorks(modal.circleName, worksPage - 1, worksPageSize, worksRjCode, worksTitle); }}>上一页</Button>
+                    <span>{worksPage} / {worksPages}</span>
+                    <Button variant="outline" size="sm" disabled={worksPage >= worksPages} onClick={() => { setWorksPage((p) => p + 1); void loadWorks(modal.circleName, worksPage + 1, worksPageSize, worksRjCode, worksTitle); }}>下一页</Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Edit circle */}
+              {modal.type === "edit" && (
+                <div className="flex flex-col gap-4 max-w-md">
+                  {editStatus.type === "error" && (
+                    <p className="text-destructive text-sm">{editStatus.msg}</p>
+                  )}
+                  {editStatus.type === "ok" && editStatus.msg && (
+                    <p className="text-sm" style={{ color: "oklch(0.696 0.17 162.48)" }}>{editStatus.msg}</p>
+                  )}
+                  {editDetail && (
+                    <>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-muted-foreground">别名</label>
+                        <Input value={editNickname} onChange={(e) => setEditNickname(e.target.value)} placeholder="别名（可选）" />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-muted-foreground">社团链接</label>
+                        <Input value={editUrl} onChange={(e) => setEditUrl(e.target.value)} placeholder="https://..." />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-muted-foreground">备注</label>
+                        <Textarea value={editRemark} onChange={(e) => setEditRemark(e.target.value)} placeholder="备注（可选）" rows={3} />
+                      </div>
+                      <Button onClick={() => void handleUpdateCircle()} disabled={editStatus.type === "loading"}>
+                        <Save className="w-4 h-4 mr-1.5" />保存
+                      </Button>
+                    </>
+                  )}
+                  {editStatus.type === "loading" && !editDetail && <p className="text-sm text-muted-foreground">加载中...</p>}
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

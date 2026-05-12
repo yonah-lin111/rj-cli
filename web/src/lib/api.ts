@@ -4,6 +4,7 @@ import type {
   CircleListResponse,
   CircleDetail,
   CircleWorksResponse,
+  CircleLatestWorksResponse,
 } from "../types";
 
 export async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -88,6 +89,14 @@ export async function fetchCircleWorks(params: CircleWorksParams): Promise<Circl
   if (params.title) q.set("title", params.title);
   const res = await fetch(`/api/circle/works?${q}`);
   const data = (await res.json()) as CircleWorksResponse & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "加载失败");
+  return data;
+}
+
+export async function fetchCircleLatestWorks(circleName: string, limit = 10): Promise<CircleLatestWorksResponse> {
+  const q = new URLSearchParams({ circle_name: circleName, limit: String(limit) });
+  const res = await fetch(`/api/circle/latest-works?${q}`);
+  const data = (await res.json()) as CircleLatestWorksResponse & { error?: string };
   if (!res.ok) throw new Error(data.error ?? "加载失败");
   return data;
 }
