@@ -83,6 +83,16 @@ export default function CirclePage() {
     type: null,
     circleName: "",
   });
+  const [showDetails, setShowDetails] = useState(false);
+
+  useEffect(() => {
+    if (modal.type) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [modal.type]);
 
   // edit modal state
   const [editDetail, setEditDetail] = useState<CircleDetail | null>(null);
@@ -105,8 +115,6 @@ export default function CirclePage() {
     type: "idle" | "loading" | "error" | "ok";
     msg?: string;
   }>({ type: "idle" });
-  const [showWorksDetails, setShowWorksDetails] = useState(false);
-
   // latest-works modal state
   const [latestWorks, setLatestWorks] = useState<CircleLatestWork[]>([]);
   const [latestStatus, setLatestStatus] = useState<{
@@ -417,14 +425,27 @@ export default function CirclePage() {
           </Button>
         </div>
 
-        <div className="text-sm text-muted-foreground mb-2 h-5">
-          {listStatus.type === "loading" ? (
-            "加载中..."
-          ) : listStatus.type === "error" ? (
-            <span className="text-destructive">{listStatus.msg}</span>
-          ) : (
-            listStatus.msg
-          )}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm text-muted-foreground h-5">
+            {listStatus.type === "loading" ? (
+              "加载中..."
+            ) : listStatus.type === "error" ? (
+              <span className="text-destructive">{listStatus.msg}</span>
+            ) : (
+              listStatus.msg
+            )}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDetails((v) => !v)}
+          >
+            {showDetails ? (
+              <><ChevronUp className="w-4 h-4 mr-1.5" />隐藏详情</>
+            ) : (
+              <><ChevronDown className="w-4 h-4 mr-1.5" />显示详情</>
+            )}
+          </Button>
         </div>
 
         <div className="rounded-lg border border-border overflow-x-auto">
@@ -585,12 +606,12 @@ export default function CirclePage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-20">封面</TableHead>
+                          {showDetails && <TableHead className="w-20">封面</TableHead>}
                           <TableHead>RJ号</TableHead>
                           <TableHead>标题</TableHead>
                           <TableHead>CV</TableHead>
-                          <TableHead>标签</TableHead>
-                          <TableHead className="w-28">分级</TableHead>
+                          {showDetails && <TableHead>标签</TableHead>}
+                          {showDetails && <TableHead className="w-28">分级</TableHead>}
                           <TableHead className="w-24 sticky right-0 bg-card">
                             操作
                           </TableHead>
@@ -600,17 +621,19 @@ export default function CirclePage() {
                         {latestStatus.type !== "loading" &&
                           latestWorks.map((w) => (
                             <TableRow key={w.rj_code}>
-                              <TableCell>
-                                {w.thumbnail ? (
-                                  <img
-                                    src={w.thumbnail}
-                                    alt={w.rj_code}
-                                    className="w-14 h-14 object-cover rounded-md bg-muted"
-                                  />
-                                ) : (
-                                  <div className="w-14 h-14 rounded-md bg-muted" />
-                                )}
-                              </TableCell>
+                              {showDetails && (
+                                <TableCell>
+                                  {w.thumbnail ? (
+                                    <img
+                                      src={w.thumbnail}
+                                      alt={w.rj_code}
+                                      className="w-14 h-14 object-cover rounded-md bg-muted"
+                                    />
+                                  ) : (
+                                    <div className="w-14 h-14 rounded-md bg-muted" />
+                                  )}
+                                </TableCell>
+                              )}
                               <TableCell className="font-medium">
                                 {w.title_url ? (
                                   <a
@@ -644,24 +667,28 @@ export default function CirclePage() {
                               <TableCell className="text-muted-foreground text-sm">
                                 {w.cv ?? "-"}
                               </TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                  {w.tags.map((t) => (
-                                    <Badge key={t} variant="secondary">
-                                      {t}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    w.is_all_ages ? "secondary" : "outline"
-                                  }
-                                >
-                                  {w.is_all_ages ? "全年龄" : "R18"}
-                                </Badge>
-                              </TableCell>
+                              {showDetails && (
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                    {w.tags.map((t) => (
+                                      <Badge key={t} variant="secondary">
+                                        {t}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                              )}
+                              {showDetails && (
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      w.is_all_ages ? "secondary" : "outline"
+                                    }
+                                  >
+                                    {w.is_all_ages ? "全年龄" : "R18"}
+                                  </Badge>
+                                </TableCell>
+                              )}
                               <TableCell className="sticky right-0 bg-card">
                                 {latestExistsMap[w.rj_code] ? (
                                   <Button size="sm" variant="outline" disabled>
@@ -686,7 +713,7 @@ export default function CirclePage() {
                           latestWorks.length === 0 && (
                             <TableRow>
                               <TableCell
-                                colSpan={7}
+                                colSpan={showDetails ? 7 : 4}
                                 className="text-center text-muted-foreground py-8"
                               >
                                 暂无作品
@@ -696,7 +723,7 @@ export default function CirclePage() {
                         {latestStatus.type === "loading" && (
                           <TableRow>
                             <TableCell
-                              colSpan={7}
+                              colSpan={showDetails ? 7 : 2}
                               className="text-center text-muted-foreground py-8"
                             >
                               加载中...
@@ -760,38 +787,21 @@ export default function CirclePage() {
                         ? "加载中..."
                         : (worksStatus.msg ?? "")}
                     </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowWorksDetails((v) => !v)}
-                    >
-                      {showWorksDetails ? (
-                        <>
-                          <ChevronUp className="w-4 h-4 mr-1.5" />
-                          隐藏详情
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="w-4 h-4 mr-1.5" />
-                          显示详情
-                        </>
-                      )}
-                    </Button>
                   </div>
                   <div className="rounded-lg border border-border overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>RJ号</TableHead>
-                          {showWorksDetails && (
+                          {showDetails && (
                             <TableHead className="w-20">封面</TableHead>
                           )}
                           <TableHead>标题</TableHead>
                           <TableHead>状态</TableHead>
                           <TableHead>发售日</TableHead>
-                          {showWorksDetails && <TableHead>标签</TableHead>}
-                          {showWorksDetails && <TableHead>来源</TableHead>}
-                          {showWorksDetails && <TableHead>添加时间</TableHead>}
+                          {showDetails && <TableHead>标签</TableHead>}
+                          {showDetails && <TableHead>来源</TableHead>}
+                          {showDetails && <TableHead>添加时间</TableHead>}
                           <TableHead className="w-20 sticky right-0 bg-card">
                             操作
                           </TableHead>
@@ -814,7 +824,7 @@ export default function CirclePage() {
                                 w.rj_code
                               )}
                             </TableCell>
-                            {showWorksDetails && (
+                            {showDetails && (
                               <TableCell>
                                 {w.thumbnail ? (
                                   <img
@@ -863,7 +873,7 @@ export default function CirclePage() {
                             <TableCell className="text-muted-foreground text-sm">
                               {w.release_date ?? "-"}
                             </TableCell>
-                            {showWorksDetails && (
+                            {showDetails && (
                               <TableCell className="text-sm max-w-[160px]">
                                 <div className="flex flex-wrap gap-1">
                                   {w.tags.slice(0, 4).map((t) => (
@@ -886,12 +896,12 @@ export default function CirclePage() {
                                 </div>
                               </TableCell>
                             )}
-                            {showWorksDetails && (
+                            {showDetails && (
                               <TableCell className="text-muted-foreground text-sm">
                                 {w.source ?? "-"}
                               </TableCell>
                             )}
-                            {showWorksDetails && (
+                            {showDetails && (
                               <TableCell className="text-muted-foreground text-sm">
                                 {w.added_at ? w.added_at.slice(0, 10) : "-"}
                               </TableCell>
@@ -912,7 +922,7 @@ export default function CirclePage() {
                           worksStatus.type !== "loading" && (
                             <TableRow>
                               <TableCell
-                                colSpan={showWorksDetails ? 9 : 5}
+                                colSpan={showDetails ? 9 : 5}
                                 className="text-center text-muted-foreground py-8"
                               >
                                 暂无作品
