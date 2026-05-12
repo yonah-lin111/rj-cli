@@ -315,7 +315,7 @@ export default function RankPage() {
         </div>
 
         {/* Table */}
-        <div className="rounded-lg border border-border overflow-auto">
+        <div className="rounded-lg border border-border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -327,7 +327,7 @@ export default function RankPage() {
                 {showDetails && <TableHead>CV</TableHead>}
                 {showDetails && <TableHead>发售日</TableHead>}
                 {showDetails && <TableHead>标签</TableHead>}
-                <TableHead className="w-32">操作</TableHead>
+                <TableHead className="w-32 sticky right-0 bg-card">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -423,7 +423,7 @@ export default function RankPage() {
                         </div>
                       </TableCell>
                     )}
-                    <TableCell>
+                    <TableCell className="sticky right-0 bg-card">
                       <div className="flex flex-col gap-1.5">
                         <Button
                           size="sm"
