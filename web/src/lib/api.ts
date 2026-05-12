@@ -1,0 +1,93 @@
+import type {
+  RankingType,
+  RankingResponse,
+  CircleListResponse,
+  CircleDetail,
+  CircleWorksResponse,
+} from "../types";
+
+export async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json()) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "操作失败");
+  return data;
+}
+
+export interface RankingParams {
+  ranking_type: RankingType;
+  page: number;
+  page_size: number;
+  rj_code?: string;
+  title?: string;
+  circle?: string;
+  cv?: string;
+}
+
+export async function fetchRanking(params: RankingParams): Promise<RankingResponse> {
+  const q = new URLSearchParams({
+    ranking_type: params.ranking_type,
+    page: String(params.page),
+    page_size: String(params.page_size),
+  });
+  if (params.rj_code) q.set("rj_code", params.rj_code);
+  if (params.title) q.set("title", params.title);
+  if (params.circle) q.set("circle", params.circle);
+  if (params.cv) q.set("cv", params.cv);
+  const res = await fetch(`/api/ranking?${q}`);
+  const data = (await res.json()) as RankingResponse & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "加载失败");
+  return data;
+}
+
+export interface CircleListParams {
+  page: number;
+  page_size: number;
+  name?: string;
+  nickname?: string;
+  remark?: string;
+}
+
+export async function fetchCircleList(params: CircleListParams): Promise<CircleListResponse> {
+  const q = new URLSearchParams({ page: String(params.page), page_size: String(params.page_size) });
+  if (params.name) q.set("name", params.name);
+  if (params.nickname) q.set("nickname", params.nickname);
+  if (params.remark) q.set("remark", params.remark);
+  const res = await fetch(`/api/circle/list?${q}`);
+  const data = (await res.json()) as CircleListResponse & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "加载失败");
+  return data;
+}
+
+export async function fetchCircleDetail(name: string): Promise<CircleDetail> {
+  const q = new URLSearchParams({ name });
+  const res = await fetch(`/api/circle/detail?${q}`);
+  const data = (await res.json()) as CircleDetail & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "加载失败");
+  return data;
+}
+
+export interface CircleWorksParams {
+  circle_name: string;
+  page: number;
+  page_size: number;
+  rj_code?: string;
+  title?: string;
+}
+
+export async function fetchCircleWorks(params: CircleWorksParams): Promise<CircleWorksResponse> {
+  const q = new URLSearchParams({
+    circle_name: params.circle_name,
+    page: String(params.page),
+    page_size: String(params.page_size),
+  });
+  if (params.rj_code) q.set("rj_code", params.rj_code);
+  if (params.title) q.set("title", params.title);
+  const res = await fetch(`/api/circle/works?${q}`);
+  const data = (await res.json()) as CircleWorksResponse & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "加载失败");
+  return data;
+}

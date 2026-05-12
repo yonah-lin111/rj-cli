@@ -1,5 +1,8 @@
 import { type AddressInfo } from "node:net";
 import type { Server } from "node:http";
+import { spawn, type ChildProcess } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   Container, Editor, Loader, ProcessTerminal, Spacer, Text, TUI,
   matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
@@ -60,6 +63,7 @@ export class RJApp {
   private rankSelector?: RankSelector;
   private circleSelector?: CircleSelector;
   private rankPageServer?: Server;
+  private viteProcess?: ChildProcess;
   private openUrlCommand?: OpenUrlCommand;
   private sessionSelector?: SessionSelector;
   private subagentSelector?: SubagentSelector;
@@ -98,12 +102,26 @@ export class RJApp {
     this.setupInputHandlers();
     this.setupSignals();
     this.tui.start();
+
+    const server = await startRankPageServer();
+    this.rankPageServer = server;
+    const address = server.address() as AddressInfo;
+
+    if (process.env.RJ_WEB_DEV === "1") {
+      const webDir = join(fileURLToPath(new URL(".", import.meta.url)), "../web");
+      this.viteProcess = spawn("pnpm", ["dev"], {
+        cwd: webDir,
+        env: { ...process.env, VITE_API_PORT: String(address.port) },
+        stdio: "ignore",
+      });
+    }
   }
 
   stop(exitCode = 0): void {
     if (this.stopped) return;
     this.stopped = true;
     this.rankPageServer?.close();
+    this.viteProcess?.kill();
     this.clearIgnoredSigint();
     this.clearIgnoredCtrlC();
     this.tui.stop();

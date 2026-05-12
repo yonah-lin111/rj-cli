@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build:web": "cd web && pnpm install && pnpm build"
   },
   "dependencies": {
     "@mariozechner/pi-tui": "^0.73.0",
