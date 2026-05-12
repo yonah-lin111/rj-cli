@@ -136,6 +136,57 @@ export const scrapeRanking = async (rankingType: RankingType, maxPages = 1): Pro
   return all;
 };
 
+export interface CircleWorkItem {
+  rj_code: string;
+  title: string;
+  title_url: string | null;
+  thumbnail: string | null;
+  release_date: string | null;
+  is_all_ages: boolean;
+}
+
+export const scrapeCircleLatestWorks = async (circleUrl: string, limit = 10): Promise<CircleWorkItem[]> => {
+  try {
+    const rgMatch = circleUrl.match(/maker_id[=/]+(RG\d+)/i);
+    if (!rgMatch) return [];
+    const rgId = rgMatch[1];
+    const searchUrl = `https://www.dlsite.com/maniax/fsr/=/language/jp/sex_category[0]/male/work_category[0]/doujin/order[0]/release_d/options_and_or/and/maker_id/${rgId}/per_page/${limit}/page/1/show_type/1.html`;
+    const res = await proxyFetch(searchUrl);
+    if (!res.ok) return [];
+    const html = await res.text();
+    const root = parse(html);
+    const items: CircleWorkItem[] = [];
+    const rows = root.querySelectorAll("table.work_1col_table tr");
+    for (const row of rows) {
+      if (items.length >= limit) break;
+      const rjCode = row.getAttribute("data-list_item_product_id");
+      if (!rjCode) continue;
+      const titleLink = row.querySelector("dt.work_name a");
+      if (!titleLink) continue;
+      const href = titleLink.getAttribute("href") ?? "";
+      const titleUrl = href ? (href.startsWith("/") ? `https://www.dlsite.com${href}` : href) : null;
+      const salesDateEl = row.querySelector("li.sales_date");
+      let releaseDate: string | null = null;
+      if (salesDateEl) {
+        const m = salesDateEl.text.match(/(\d{4})年(\d{2})月(\d{2})日/);
+        if (m) releaseDate = `${m[1]}/${m[2]}/${m[3]}`;
+      }
+      const isAllAges = !!row.querySelector("span.icon_GEN");
+      items.push({
+        rj_code: rjCode,
+        title: titleLink.text.trim(),
+        title_url: titleUrl,
+        thumbnail: buildThumbnailUrl(rjCode),
+        release_date: releaseDate,
+        is_all_ages: isAllAges,
+      });
+    }
+    return items;
+  } catch {
+    return [];
+  }
+};
+
 export const scrapeWorkDetail = async (workUrl: string): Promise<Partial<RankingItem> | null> => {
   try {
     const res = await proxyFetch(workUrl);

@@ -1,6 +1,6 @@
 import { openDb, parseTags, serializeTags, normalizeRjCode } from "./db.ts";
 import { cacheGet, cacheSet, rankingCacheKey } from "./cache.ts";
-import { scrapeRanking, scrapeWorkDetail, type RankingType, type RankingItem } from "./scraper.ts";
+import { scrapeRanking, scrapeWorkDetail, scrapeCircleLatestWorks, type RankingType, type RankingItem } from "./scraper.ts";
 
 export interface RjServerToolResult {
   content: string;
@@ -84,6 +84,43 @@ export interface RemoveCircleArgs {
 export interface CheckCircleExistsArgs {
   names: string[];
 }
+
+export interface CircleQueryArgs {
+  page?: number;
+  page_size?: number;
+  name?: string;
+  nickname?: string;
+  remark?: string;
+}
+
+export interface CircleDetailArgs {
+  name: string;
+}
+
+export interface UpdateCircleArgs {
+  name: string;
+  nickname?: string;
+  circle_url?: string | null;
+  remark?: string | null;
+}
+
+export interface CircleWorksQueryArgs {
+  circle_name: string;
+  page?: number;
+  page_size?: number;
+  rj_code?: string;
+  title?: string;
+}
+
+export interface CircleWorkArgs {
+  circle_name: string;
+  rj_code: string;
+}
+
+const optionalText = (value: string | null | undefined): string | null => {
+  const text = value?.trim();
+  return text ? text : null;
+};
 
 const getCachedRankingItems = async (rankingType: RankingType): Promise<RankingItem[]> => {
   const cacheKey = rankingCacheKey(rankingType);
@@ -220,6 +257,181 @@ export const checkCircleExistsTool = (args: CheckCircleExistsArgs): RjServerTool
     return { content: JSON.stringify({ exists }, null, 2), resultLabel: `Circle exists ${names.length}`, isError: false };
   } catch (err) {
     return { content: `检查社团失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const queryCircleTool = (args: CircleQueryArgs): RjServerToolResult => {
+  const { page = 1, page_size = 20, name, nickname, remark } = args;
+  try {
+    const db = openDb(true);
+    const conditions: string[] = [];
+    const params: Record<string, unknown> = {};
+
+    if (name) { conditions.push("name LIKE :name"); params.name = `%${name}%`; }
+    if (nickname) { conditions.push("nickname LIKE :nickname"); params.nickname = `%${nickname}%`; }
+    if (remark) { conditions.push("remark LIKE :remark"); params.remark = `%${remark}%`; }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const total = (db.prepare(`SELECT COUNT(*) as cnt FROM circle ${where}`).get(params) as { cnt: number }).cnt;
+    const pageSize = Math.min(100, Math.max(1, Math.floor(page_size)));
+    const currentPage = Math.max(1, Math.floor(page));
+    const offset = (currentPage - 1) * pageSize;
+    const rows = db.prepare(`
+      SELECT id, name, nickname, circle_url, remark, created_at,
+        (SELECT COUNT(*) FROM rj WHERE rj.circle = circle.name) as work_count
+      FROM circle ${where}
+      ORDER BY id DESC
+      LIMIT :limit OFFSET :offset
+    `).all({ ...params, limit: pageSize, offset }) as Record<string, unknown>[];
+    db.close();
+
+    return {
+      content: JSON.stringify({ total, page: currentPage, page_size: pageSize, data: rows }, null, 2),
+      resultLabel: `社团查询 (${total} 条)`,
+      isError: false,
+    };
+  } catch (err) {
+    return { content: `查询社团失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const getCircleDetailTool = (args: CircleDetailArgs): RjServerToolResult => {
+  try {
+    const name = args.name.trim();
+    if (!name) return { content: "社团名不能为空", resultLabel: "error", isError: true };
+    const db = openDb(true);
+    const row = db.prepare(`
+      SELECT id, name, nickname, circle_url, remark, created_at,
+        (SELECT COUNT(*) FROM rj WHERE rj.circle = circle.name) as work_count
+      FROM circle
+      WHERE name = ?
+      LIMIT 1
+    `).get(name) as Record<string, unknown> | undefined;
+    db.close();
+    if (!row) return { content: `未找到社团: ${name}`, resultLabel: "not found", isError: true };
+    return { content: JSON.stringify(row, null, 2), resultLabel: `Circle ${name}`, isError: false };
+  } catch (err) {
+    return { content: `获取社团详情失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const updateCircleTool = (args: UpdateCircleArgs): RjServerToolResult => {
+  try {
+    const name = args.name.trim();
+    if (!name) return { content: "社团名不能为空", resultLabel: "error", isError: true };
+    const db = openDb(false);
+    const exists = db.prepare("SELECT 1 FROM circle WHERE name = ? LIMIT 1").get(name);
+    if (!exists) {
+      db.close();
+      return { content: `未找到社团: ${name}`, resultLabel: "not found", isError: true };
+    }
+    const nickname = args.nickname?.trim() || name;
+    const result = db.prepare("UPDATE circle SET nickname = ?, circle_url = ?, remark = ? WHERE name = ?")
+      .run(nickname, optionalText(args.circle_url), optionalText(args.remark), name);
+    db.close();
+    return { content: JSON.stringify({ name, updated: result.changes > 0 }, null, 2), resultLabel: `Circle updated ${name}`, isError: false };
+  } catch (err) {
+    return { content: `更新社团失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const queryCircleWorksTool = (args: CircleWorksQueryArgs): RjServerToolResult => {
+  const { circle_name, page = 1, page_size = 20, rj_code, title } = args;
+  try {
+    const circleName = circle_name.trim();
+    if (!circleName) return { content: "社团名不能为空", resultLabel: "error", isError: true };
+    const db = openDb(true);
+    const conditions = ["circle = :circle_name"];
+    const params: Record<string, unknown> = { circle_name: circleName };
+    if (rj_code) { conditions.push("rj_code LIKE :rj_code"); params.rj_code = `%${rj_code}%`; }
+    if (title) { conditions.push("title LIKE :title"); params.title = `%${title}%`; }
+    const where = `WHERE ${conditions.join(" AND ")}`;
+    const total = (db.prepare(`SELECT COUNT(*) as cnt FROM rj ${where}`).get(params) as { cnt: number }).cnt;
+    const pageSize = Math.min(100, Math.max(1, Math.floor(page_size)));
+    const currentPage = Math.max(1, Math.floor(page));
+    const offset = (currentPage - 1) * pageSize;
+    const rows = db.prepare(`SELECT * FROM rj ${where} ORDER BY id DESC LIMIT :limit OFFSET :offset`)
+      .all({ ...params, limit: pageSize, offset }) as Record<string, unknown>[];
+    db.close();
+    const data = rows.map(r => ({ ...r, tags: parseTags(r.tags) }));
+    return {
+      content: JSON.stringify({ circle_name: circleName, total, page: currentPage, page_size: pageSize, data }, null, 2),
+      resultLabel: `社团作品查询 (${total} 条)`,
+      isError: false,
+    };
+  } catch (err) {
+    return { content: `查询社团作品失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const addWorkToCircleTool = (args: CircleWorkArgs): RjServerToolResult => {
+  try {
+    const circleName = args.circle_name.trim();
+    const rjCode = normalizeRjCode(args.rj_code);
+    if (!circleName) return { content: "社团名不能为空", resultLabel: "error", isError: true };
+    const db = openDb(false);
+    const circle = db.prepare("SELECT circle_url FROM circle WHERE name = ? LIMIT 1").get(circleName) as { circle_url: string | null } | undefined;
+    if (!circle) {
+      db.close();
+      return { content: `未找到社团: ${circleName}`, resultLabel: "not found", isError: true };
+    }
+    const work = db.prepare("SELECT circle_url FROM rj WHERE rj_code = ? LIMIT 1").get(rjCode) as { circle_url: string | null } | undefined;
+    if (!work) {
+      db.close();
+      return { content: `未找到 RJ: ${rjCode}`, resultLabel: "not found", isError: true };
+    }
+    db.prepare("UPDATE rj SET circle = ?, circle_url = ? WHERE rj_code = ?")
+      .run(circleName, circle.circle_url || work.circle_url || null, rjCode);
+    db.close();
+    return { content: JSON.stringify({ circle_name: circleName, rj_code: rjCode, added: true }, null, 2), resultLabel: `Circle work added ${rjCode}`, isError: false };
+  } catch (err) {
+    return { content: `添加社团作品失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const removeWorkFromCircleTool = (args: CircleWorkArgs): RjServerToolResult => {
+  try {
+    const circleName = args.circle_name.trim();
+    const rjCode = normalizeRjCode(args.rj_code);
+    if (!circleName) return { content: "社团名不能为空", resultLabel: "error", isError: true };
+    const db = openDb(false);
+    const result = db.prepare("UPDATE rj SET circle = NULL, circle_url = NULL WHERE rj_code = ? AND circle = ?")
+      .run(rjCode, circleName);
+    db.close();
+    return { content: JSON.stringify({ circle_name: circleName, rj_code: rjCode, removed: result.changes > 0 }, null, 2), resultLabel: `Circle work removed ${rjCode}`, isError: false };
+  } catch (err) {
+    return { content: `移除社团作品失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+// ── 社团最新发布作品（爬取） ──────────────────────────────────────────────────
+
+export interface CircleLatestWorksArgs {
+  circle_name: string;
+  limit?: number;
+}
+
+export const getCircleLatestWorksTool = async (args: CircleLatestWorksArgs): Promise<RjServerToolResult> => {
+  try {
+    const circleName = args.circle_name.trim();
+    const limit = Math.min(20, Math.max(1, args.limit ?? 10));
+    if (!circleName) return { content: "社团名不能为空", resultLabel: "error", isError: true };
+
+    const db = openDb(true);
+    const row = db.prepare("SELECT circle_url FROM circle WHERE name = ?").get(circleName) as { circle_url: string | null } | undefined;
+    db.close();
+
+    if (!row) return { content: `社团 "${circleName}" 不存在`, resultLabel: "error", isError: true };
+    if (!row.circle_url) return { content: `社团 "${circleName}" 未设置 circle_url，无法爬取最新作品`, resultLabel: "error", isError: true };
+
+    const items = await scrapeCircleLatestWorks(row.circle_url, limit);
+    return {
+      content: JSON.stringify({ circle_name: circleName, circle_url: row.circle_url, total: items.length, items }, null, 2),
+      resultLabel: `${circleName} 最新 ${items.length} 部作品`,
+      isError: false,
+    };
+  } catch (err) {
+    return { content: `爬取社团最新作品失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
   }
 };
 

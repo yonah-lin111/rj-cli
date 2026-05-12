@@ -14,6 +14,13 @@ export const getToolCallLabel = (callName: string, args: Record<string, unknown>
   if (callName === "rj_add") return `Add RJ ${args.rj_code ?? ""}`;
   if (callName === "rj_remove") return `Remove RJ ${args.rj_code ?? ""}`;
   if (callName === "rj_check_exists") return "Check RJ Exists";
+  if (callName === "circle_query") return "Query Circle";
+  if (callName === "circle_get_detail") return `Circle Detail ${args.name ?? ""}`;
+  if (callName === "circle_update") return `Update Circle ${args.name ?? ""}`;
+  if (callName === "circle_query_works") return `Query Circle Works ${args.circle_name ?? ""}`;
+  if (callName === "circle_add_work") return `Add Circle Work ${args.rj_code ?? ""}`;
+  if (callName === "circle_remove_work") return `Remove Circle Work ${args.rj_code ?? ""}`;
+  if (callName === "circle_get_latest_works") return `Circle Latest Works ${args.circle_name ?? ""}`;
   if (callName === "circle_add") return `Add Circle ${args.name ?? ""}`;
   if (callName === "circle_remove") return `Remove Circle ${args.name ?? ""}`;
   if (callName === "circle_check_exists") return "Check Circle Exists";

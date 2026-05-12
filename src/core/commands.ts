@@ -21,6 +21,7 @@ export type CommandAction =
   | { type: "system-messages"; messages: string[] }
   | { type: "show-model-selector"; search: string }
   | { type: "show-rank-selector" }
+  | { type: "show-circle-selector" }
   | { type: "show-session-selector" }
   | { type: "clear"; messages?: string[] }
   | { type: "undo" }
@@ -58,6 +59,12 @@ const commandList: SlashCommand[] = [
     usage: "/rank",
     description: "Open the RJ ranking selector.",
     handler: () => ({ type: "show-rank-selector" }),
+  },
+  {
+    name: "/circle",
+    usage: "/circle",
+    description: "Open the circle list selector.",
+    handler: () => ({ type: "show-circle-selector" }),
   },
   {
     name: "/clear",

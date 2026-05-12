@@ -410,6 +410,132 @@ export const rjQuerySchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+export const circleQuerySchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_query",
+    description: "查询本地数据库中已收录的社团，支持分页和可选条件筛选，返回作品数量统计。",
+    parameters: {
+      type: "object",
+      properties: {
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        name: { type: "string", description: "按社团名模糊查询。" },
+        nickname: { type: "string", description: "按昵称模糊查询。" },
+        remark: { type: "string", description: "按备注模糊查询。" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleGetDetailSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_get_detail",
+    description: "获取本地数据库中指定社团的详情和作品数量。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleUpdateSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_update",
+    description: "更新社团昵称、链接和备注，不支持改名。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名，用于定位记录。" },
+        nickname: { type: "string", description: "社团昵称，空值将回退为社团名。" },
+        circle_url: { type: ["string", "null"], description: "社团链接，空字符串或 null 会清空。" },
+        remark: { type: ["string", "null"], description: "备注，空字符串或 null 会清空。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleQueryWorksSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_query_works",
+    description: "查询本地数据库中属于指定社团的 RJ 作品，支持 RJ 号、标题筛选和分页。",
+    parameters: {
+      type: "object",
+      properties: {
+        circle_name: { type: "string", description: "社团名。" },
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        rj_code: { type: "string", description: "按 RJ 号筛选。" },
+        title: { type: "string", description: "按标题模糊查询。" },
+      },
+      required: ["circle_name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleAddWorkSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_add_work",
+    description: "将本地数据库中已存在的 RJ 作品关联到指定社团。",
+    parameters: {
+      type: "object",
+      properties: {
+        circle_name: { type: "string", description: "社团名。" },
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+      },
+      required: ["circle_name", "rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleRemoveWorkSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_remove_work",
+    description: "从指定社团移除本地 RJ 作品关联，不删除作品记录。",
+    parameters: {
+      type: "object",
+      properties: {
+        circle_name: { type: "string", description: "社团名。" },
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+      },
+      required: ["circle_name", "rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleGetLatestWorksSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_get_latest_works",
+    description: "爬取指定社团在 DLsite 上最新发布的作品列表（需要社团已设置 circle_url）。",
+    parameters: {
+      type: "object",
+      properties: {
+        circle_name: { type: "string", description: "社团名，必须与本地数据库中的社团名一致。" },
+        limit: { type: "number", description: "返回数量，默认 10，最多 20。" },
+      },
+      required: ["circle_name"],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** rj_get_detail tool 的 OpenAI schema */
 export const rjGetDetailSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",

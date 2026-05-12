@@ -7,8 +7,8 @@ import {
 import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
-import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool } from "./tools/rj-server/index.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
+import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool } from "./tools/rj-server/index.ts";
 import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
@@ -20,6 +20,7 @@ import { Footer } from "./ui/footer.ts";
 import { headerText, subagentHeaderText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { RankSelector, type RankSelection } from "./ui/rank-selector.ts";
+import { CircleSelector, type CircleSelection, type CircleSelectorItem } from "./ui/circle-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
 import { SubagentSelector } from "./ui/subagent-selector.ts";
 import { AskPrompt } from "./ui/ask-prompt.ts";
@@ -57,6 +58,7 @@ export class RJApp {
   private todoLoadingTimer?: NodeJS.Timeout;
   private modelSelector?: ModelSelector;
   private rankSelector?: RankSelector;
+  private circleSelector?: CircleSelector;
   private rankPageServer?: Server;
   private openUrlCommand?: OpenUrlCommand;
   private sessionSelector?: SessionSelector;
@@ -185,6 +187,12 @@ export class RJApp {
         return { consume: true };
       }
 
+      if (this.circleSelector) {
+        this.circleSelector.handleInput(data);
+        this.requestRender();
+        return { consume: true };
+      }
+
       if (this.sessionSelector) {
         this.sessionSelector.handleInput(data);
         this.requestRender();
@@ -279,32 +287,28 @@ export class RJApp {
   private async handleSubmit(rawText: string): Promise<void> {
     const text = rawText.trim();
     if (!text) return;
-    this.editor.addToHistory(text);
 
     const isSingleLine = !/[\r\n]/.test(rawText);
     if (isSingleLine && text.startsWith("/") && /^\/[^\s/]+(\s|$)/.test(text)) {
-      if (this.promptHistory.at(-1) !== text) {
-        this.promptHistory.push(text);
-        savePromptHistory(this.promptHistory);
-      }
-      this.handleSlash(text);
+      if (this.handleSlash(text)) this.recordPromptHistory(text);
       return;
     }
 
+    this.recordPromptHistory(text);
+
     if (text.startsWith("!")) {
-      if (this.promptHistory.at(-1) !== text) {
-        this.promptHistory.push(text);
-        savePromptHistory(this.promptHistory);
-      }
       await this.handleBash(text);
       return;
     }
 
-    if (this.promptHistory.at(-1) !== text) {
-      this.promptHistory.push(text);
-      savePromptHistory(this.promptHistory);
-    }
     await this.handleChat(text);
+  }
+
+  private recordPromptHistory(text: string): void {
+    this.editor.addToHistory(text);
+    if (this.promptHistory.at(-1) === text) return;
+    this.promptHistory.push(text);
+    savePromptHistory(this.promptHistory);
   }
 
   private async handleChat(text: string): Promise<void> {
@@ -352,7 +356,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -450,6 +454,48 @@ export class RJApp {
                 entry.resultText = resultText;
               } else if (call.name === "rj_query") {
                 const result = queryRjTool(args as Parameters<typeof queryRjTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_query") {
+                const result = queryCircleTool(args as Parameters<typeof queryCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_get_detail") {
+                const result = getCircleDetailTool(args as unknown as Parameters<typeof getCircleDetailTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_update") {
+                const result = updateCircleTool(args as unknown as Parameters<typeof updateCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_query_works") {
+                const result = queryCircleWorksTool(args as unknown as Parameters<typeof queryCircleWorksTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_add_work") {
+                const result = addWorkToCircleTool(args as unknown as Parameters<typeof addWorkToCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_remove_work") {
+                const result = removeWorkFromCircleTool(args as unknown as Parameters<typeof removeWorkFromCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_get_latest_works") {
+                const result = await getCircleLatestWorksTool(args as unknown as Parameters<typeof getCircleLatestWorksTool>[0]);
                 resultText = result.content;
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;
@@ -743,14 +789,14 @@ export class RJApp {
     }, 3000);
   }
 
-  private handleSlash(text: string): void {
+  private handleSlash(text: string): boolean {
     this.state.commandCount++;
     const context: AppCommandContext = { ...this.state };
     const action = executeSlashCommand(text, context);
 
     if (action.type === "quit") {
       this.stop(0);
-      return;
+      return true;
     }
 
     if (action.type === "clear") {
@@ -767,7 +813,7 @@ export class RJApp {
       this.resetContextUsage();
       if (action.messages?.[0]) this.showPrompt(action.messages[0]);
       this.requestRender();
-      return;
+      return true;
     }
 
     if (action.type === "undo") {
@@ -785,31 +831,37 @@ export class RJApp {
         this.undoLastQA();
       }
       this.requestRender();
-      return;
+      return true;
     }
 
     if (action.type === "show-session-selector") {
       this.showSessionSelector();
       this.requestRender();
-      return;
+      return true;
     }
 
     if (action.type === "show-rank-selector") {
       this.showRankSelector();
       this.requestRender();
-      return;
+      return true;
+    }
+
+    if (action.type === "show-circle-selector") {
+      this.showCircleSelector();
+      this.requestRender();
+      return true;
     }
 
     if (action.type === "show-model-selector") {
       this.showModelSelector(action.search);
       this.requestRender();
-      return;
+      return true;
     }
 
     if (action.type === "system-messages") {
       for (const message of action.messages) this.addMessage("system", message);
       this.requestRender();
-      return;
+      return true;
     }
 
     if (action.type === "fill-input") {
@@ -823,16 +875,17 @@ export class RJApp {
         }
       }
       this.requestRender();
-      return;
+      return false;
     }
 
     if (action.type === "chat") {
       void this.handleChat(action.text);
-      return;
+      return true;
     }
 
     for (const message of action.messages) this.showPrompt(message);
     this.requestRender();
+    return true;
   }
 
   private async handleBash(text: string): Promise<void> {
@@ -994,6 +1047,76 @@ export class RJApp {
     const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
     this.openUrlCommand = opener;
     await this.handleChat(`请使用 bash 工具打开 RJ 排行榜页面，并在命令执行后简短说明页面已打开，支持分页、排行周期切换以及 RJ号/标题/社团/CV 条件查询。
+
+要求：
+1. 当前系统打开命令是 ${opener.command}
+2. 页面地址是 ${url}
+3. 只调用一次 bash 工具打开页面
+4. 命令中必须安全引用 URL，不要拼接未转义的参数
+5. bash 完成后简短回复打开结果`);
+  }
+
+  private showCircleSelector(): void {
+    let circles: CircleSelectorItem[] = [];
+    const result = queryCircleTool({ page: 1, page_size: 500 });
+    if (result.isError) {
+      this.showPrompt(result.content);
+    } else {
+      const data = JSON.parse(result.content) as { data?: CircleSelectorItem[] };
+      circles = data.data ?? [];
+    }
+
+    const selector = new CircleSelector(
+      (selection) => {
+        this.closeCircleSelector();
+        void this.handleCircleSelection(selection);
+      },
+      () => {
+        this.closeCircleSelector();
+        this.requestRender();
+      },
+      circles,
+    );
+    this.circleSelector = selector;
+    this.refreshChat();
+    this.tui.setFocus(selector);
+  }
+
+  private closeCircleSelector(): void {
+    this.circleSelector = undefined;
+    this.tui.setFocus(this.editor);
+  }
+
+  private async handleCircleSelection(selection: CircleSelection): Promise<void> {
+    if (selection.outputMode === "page") {
+      await this.openCirclePage();
+      return;
+    }
+
+    if (!selection.circleName) {
+      this.addMessage("system", "当前本地数据库中没有社团记录", "result");
+      this.requestRender();
+      return;
+    }
+
+    await this.handleChat(`请输出社团”${selection.circleName}”的详情和最新发布作品：
+1. 调用 circle_get_detail，参数 name=${selection.circleName}
+2. 调用 circle_get_latest_works，参数 circle_name=${selection.circleName}、limit=10
+3. 输出”社团基本信息”小节：社团名、昵称、链接、备注、创建时间、本地作品数
+4. 输出”DLsite 最新 10 部作品”Markdown 表格：RJ号、标题、发售日、全年龄
+5. 标题非空时渲染为 Markdown 链接（使用 title_url）
+6. 如果 circle_get_latest_works 返回错误或 items 为空，输出”暂无最新作品（可能未设置 circle_url）”
+7. 只输出结果，不导出文件`);
+  }
+
+  private async openCirclePage(): Promise<void> {
+    const server = this.rankPageServer?.listening ? this.rankPageServer : await startRankPageServer();
+    this.rankPageServer = server;
+    const address = server.address() as AddressInfo;
+    const url = `http://127.0.0.1:${address.port}/circle?page_size=30`;
+    const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
+    this.openUrlCommand = opener;
+    await this.handleChat(`请使用 bash 工具打开本地社团管理页面，并在命令执行后简短说明页面已打开，支持社团新增/编辑/删除，以及社团作品查询、添加和移除。
 
 要求：
 1. 当前系统打开命令是 ${opener.command}
@@ -1193,6 +1316,8 @@ export class RJApp {
       this.chat.addChild(this.modelSelector);
     } else if (this.rankSelector) {
       this.chat.addChild(this.rankSelector);
+    } else if (this.circleSelector) {
+      this.chat.addChild(this.circleSelector);
     } else if (this.sessionSelector) {
       this.chat.addChild(this.sessionSelector);
     } else if (this.subagentSelector) {
