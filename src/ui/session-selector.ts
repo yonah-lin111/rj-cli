@@ -25,7 +25,7 @@ export class SessionSelector extends Container implements Focusable {
 
     this.items = sessions.map((s) => ({
       value: s.id,
-      label: s.title,
+      label: formatTitle(s.title),
       description: formatDate(s.updatedAt),
       session: s,
     }));
@@ -105,6 +105,8 @@ export class SessionSelector extends Container implements Focusable {
     );
   }
 }
+
+const formatTitle = (title: string): string => title.replace(/\s+/g, " ").trim() || "Untitled session";
 
 /** 将 ISO 时间字符串格式化为可读形式 */
 const formatDate = (iso: string): string => {
