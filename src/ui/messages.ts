@@ -42,6 +42,8 @@ export interface ToolCallEntry {
   subagentAction?: "new" | "reuse";
   subagentTitle?: string;
   subagentAgentId?: string;
+  subagentToolCount?: number;
+  subagentDetailLabel?: string;
 }
 
 /** assistant 消息的一个轮次段落：thinking + text + tool calls */
@@ -137,15 +139,12 @@ const shouldShowResultLabel = (entry: ToolCallEntry): boolean => {
 const renderToolCall = (entry: ToolCallEntry): string[] => {
   // explore subagent 特殊渲染格式
   if (entry.name === "explore") {
-    const statusIcon =
-      entry.status === "running"
-        ? theme.accent(SPINNER_FRAMES[(entry.spinnerFrame ?? 0) % SPINNER_FRAMES.length]!)
-        : entry.status === "error"
-          ? theme.error("✗")
-          : theme.success("✓");
-    const nameLine = `${theme.accent("/explore")} ${statusIcon}`;
-    const taskLine = ` ${theme.dim("⎿")}  ${theme.dim(entry.callLabel)}`;
-    const hintLine = ` ${theme.muted("ctrl+o")}`;
+    const statusLabel = entry.status === "running" ? "working" : entry.status === "error" ? "error" : "done";
+    const toolCount = entry.subagentToolCount ?? 0;
+    const nameLine = `${theme.askLabel("[sub]")}${theme.accent("explore")} ${theme.dim("|")} ${statusLabel} ${theme.dim("|")} ${theme.dim(`tools:${toolCount}`)}`;
+    const detail = (entry.subagentDetailLabel ?? entry.callLabel).trim();
+    const taskLine = ` ${theme.dim("⎿")} ${entry.status === "error" ? theme.error(detail) : theme.dim(detail)}`;
+    const hintLine = ` ${theme.muted("(ctrl+o to open)")}`;
     return [nameLine, taskLine, hintLine];
   }
 

@@ -442,6 +442,107 @@ export const rjGetOverviewSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+export const rjAddSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_add",
+    description: "从排行榜缓存或抓取结果中添加指定 RJ 到本地数据库。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+        ranking_type: { type: "string", enum: ["24h", "7d", "30d", "year"], description: "排行榜时间段。" },
+        source: { type: "string", description: "可选来源，默认 ranking:<ranking_type>。" },
+      },
+      required: ["rj_code", "ranking_type"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rjRemoveSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_remove",
+    description: "从本地数据库删除指定 RJ。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+      },
+      required: ["rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rjCheckExistsSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_check_exists",
+    description: "批量检查 RJ 是否已存在于本地数据库。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_codes: { type: "array", items: { type: "string" }, description: "RJ 号列表。" },
+      },
+      required: ["rj_codes"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleAddSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_add",
+    description: "添加社团到本地社团库，已存在时不会重复插入。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名。" },
+        circle_url: { type: "string", description: "社团链接。" },
+        nickname: { type: "string", description: "社团昵称，默认等于社团名。" },
+        remark: { type: "string", description: "备注。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleRemoveSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_remove",
+    description: "从本地社团库删除指定社团。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleCheckExistsSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_check_exists",
+    description: "批量检查社团是否已存在于本地社团库。",
+    parameters: {
+      type: "object",
+      properties: {
+        names: { type: "array", items: { type: "string" }, description: "社团名列表。" },
+      },
+      required: ["names"],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** ask tool 的 OpenAI schema */
 export const askToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",

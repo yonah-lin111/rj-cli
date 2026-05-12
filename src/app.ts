@@ -7,8 +7,8 @@ import {
 import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
-import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool } from "./tools/rj-server/index.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
+import { getRankingTool, queryRjTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool } from "./tools/rj-server/index.ts";
 import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
@@ -352,7 +352,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -466,6 +466,42 @@ export class RJApp {
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;
                 entry.resultText = resultText;
+              } else if (call.name === "rj_add") {
+                const result = await addRjFromRankingTool(args as unknown as Parameters<typeof addRjFromRankingTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rj_remove") {
+                const result = removeRjTool(args as unknown as Parameters<typeof removeRjTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rj_check_exists") {
+                const result = checkRjExistsTool(args as unknown as Parameters<typeof checkRjExistsTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_add") {
+                const result = addCircleTool(args as unknown as Parameters<typeof addCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_remove") {
+                const result = removeCircleTool(args as unknown as Parameters<typeof removeCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_check_exists") {
+                const result = checkCircleExistsTool(args as unknown as Parameters<typeof checkCircleExistsTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
               } else if (call.name === "rj_work_ops_preview") {
                 const result = previewWorkOps(args as unknown as WorkOpsPreviewArgs);
                 resultText = JSON.stringify(result, null, 2);
@@ -507,6 +543,8 @@ export class RJApp {
                   setToolEntry("error", resultText, true);
                 } else {
                   entry.callLabel = task.slice(0, 60);
+                  entry.subagentToolCount = 0;
+                  entry.subagentDetailLabel = `New: ${task.slice(0, 80)}`;
                   clearInterval(spinnerTimer);
                   // 启动 explore 专用 spinner
                   const exploreSpinner = setInterval(() => {

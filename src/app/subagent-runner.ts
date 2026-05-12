@@ -18,6 +18,11 @@ type RunExploreSubagentParams = {
   requestRender: () => void;
 };
 
+const firstSentence = (text: string): string => {
+  const [sentence] = text.trim().split(/(?<=[。！？.!?])\s+|\n+/, 1);
+  return (sentence || text.trim()).slice(0, 80);
+};
+
 export const runExploreSubagentWithSnapshot = async ({
   agent,
   task,
@@ -50,7 +55,9 @@ export const runExploreSubagentWithSnapshot = async ({
     toolEntry.subagentId = snapshot.id;
     toolEntry.subagentAction = action;
     toolEntry.subagentAgentId = agent.id;
-    toolEntry.callLabel = `${action === "new" ? "New" : "Reuse"}: ${task.slice(0, 52)}`;
+    toolEntry.subagentToolCount = snapshot.toolEntries.length;
+    toolEntry.subagentDetailLabel = `${action === "new" ? "New" : "Reuse"}: ${firstSentence(task)}`;
+    toolEntry.callLabel = toolEntry.subagentDetailLabel;
 
     // 当前 subagent assistant 消息及其当前 segment（与主 agent 结构完全一致）
     let subagentAssistant: Message | undefined;
@@ -88,6 +95,8 @@ export const runExploreSubagentWithSnapshot = async ({
           },
           onToolCall: (callId, toolName, callLabel) => {
             if (!subagentSegment) return;
+            toolEntry.subagentToolCount = (toolEntry.subagentToolCount ?? 0) + 1;
+            toolEntry.subagentDetailLabel = callLabel;
             const entry: ToolCallEntry = { id: callId, name: toolName, status: "running", callLabel, spinnerFrame: 0 };
             subagentSegment.toolCalls = [...(subagentSegment.toolCalls ?? []), entry];
             pendingEntries.set(callId, entry);
@@ -141,9 +150,11 @@ export const runExploreSubagentWithSnapshot = async ({
       snapshot.runCount += 1;
       snapshot.updatedAt = finishedAt;
       snapshot.lastRunAt = finishedAt;
-      toolEntry.callLabel = `${action === "new" ? "New" : "Reuse"}: ${result.title || task.slice(0, 52)}`;
-      toolEntry.resultLabel = `${result.toolEntries.length} files read`;
+      toolEntry.callLabel = `${action === "new" ? "New" : "Reuse"}: ${result.title || firstSentence(task)}`;
+      toolEntry.resultLabel = `${result.toolEntries.length} tools`;
       toolEntry.subagentTitle = snapshot.title;
+      toolEntry.subagentToolCount = snapshot.toolEntries.length;
+      toolEntry.subagentDetailLabel = `${action === "new" ? "New" : "Reuse"}: ${firstSentence(task)}`;
       requestRender();
       return { content: result.summary, isError: false };
     } catch (err) {
@@ -154,6 +165,7 @@ export const runExploreSubagentWithSnapshot = async ({
       snapshot.errorMessage = msg;
       snapshot.updatedAt = new Date().toISOString();
       toolEntry.resultLabel = msg.slice(0, 40);
+      toolEntry.subagentDetailLabel = msg.slice(0, 80);
       snapshot.messages.push({ kind: "error", text: msg, label: "error" });
       requestRender();
       return { content: `Explore failed: ${msg}`, isError: true };

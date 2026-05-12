@@ -57,3 +57,7 @@ export const parseTags = (raw: unknown): string[] => {
   }
   return [];
 };
+
+export const serializeTags = (tags: unknown): string => JSON.stringify(parseTags(tags));
+
+export const normalizeRjCode = (value: string): string => value.trim().toUpperCase();

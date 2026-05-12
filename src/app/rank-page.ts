@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { getRankingTool } from "../tools/rj-server/index.ts";
+import { getRankingTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool } from "../tools/rj-server/index.ts";
 import type { RankSelection } from "../ui/rank-selector.ts";
 
 export const startRankPageServer = async (): Promise<Server> => {
@@ -24,6 +24,36 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (url.pathname === "/api/ranking") {
     await sendRankPageData(url, res);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/rj/check") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => checkRjExistsTool(body as unknown as Parameters<typeof checkRjExistsTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/rj/add") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => addRjFromRankingTool(body as unknown as Parameters<typeof addRjFromRankingTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/rj/remove") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => removeRjTool(body as unknown as Parameters<typeof removeRjTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/circle/check") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => checkCircleExistsTool(body as unknown as Parameters<typeof checkCircleExistsTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/circle/add") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => addCircleTool(body as unknown as Parameters<typeof addCircleTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/circle/remove") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => removeCircleTool(body as unknown as Parameters<typeof removeCircleTool>[0]));
     return;
   }
   sendJson(res, { error: "Not found" }, 404);
@@ -60,6 +90,28 @@ export const parsePositiveInt = (value: string | null, fallback: number, min: nu
   return Math.min(max, Math.max(min, parsed));
 };
 
+const readJsonBody = async (req: IncomingMessage): Promise<Record<string, unknown>> => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) return {};
+  const parsed = JSON.parse(raw) as unknown;
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+};
+
+const sendToolResponse = async (res: ServerResponse, run: () => Promise<{ content: string; isError: boolean }> | { content: string; isError: boolean }): Promise<void> => {
+  try {
+    const result = await run();
+    if (result.isError) {
+      sendJson(res, { error: result.content }, 500);
+      return;
+    }
+    sendJson(res, JSON.parse(result.content));
+  } catch (err) {
+    sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+};
+
 const sendJson = (res: ServerResponse, data: unknown, statusCode = 200): void => {
   const body = JSON.stringify(data);
   res.writeHead(statusCode, {
@@ -94,7 +146,7 @@ const sendRankPageHtml = (res: ServerResponse): void => {
     button.secondary { background: #1f2937; border-color: #334155; }
     .summary { margin: 8px 0 12px; color: var(--muted); font-size: 13px; }
     .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; min-width: 1120px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1280px; }
     th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; font-size: 13px; }
     th { position: sticky; top: 0; background: #111827; color: #cbd5e1; white-space: nowrap; }
     tr:hover td { background: rgba(56, 189, 248, .06); }
@@ -102,6 +154,10 @@ const sendRankPageHtml = (res: ServerResponse): void => {
     .thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: #020617; }
     .tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; }
     .tag { padding: 2px 6px; border-radius: 999px; background: #1e293b; color: #cbd5e1; font-size: 12px; }
+    .actions { display: grid; gap: 6px; min-width: 92px; }
+    .actions button { height: 30px; padding: 0 8px; font-size: 12px; }
+    .actions button.remove { background: #9f1239; border-color: #be123c; }
+    button:disabled { cursor: not-allowed; opacity: .5; }
     .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; color: var(--muted); }
     .error { color: var(--danger); }
     @media (max-width: 1100px) { .filters { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
@@ -135,7 +191,7 @@ const sendRankPageHtml = (res: ServerResponse): void => {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>排名</th><th>封面</th><th>RJ号</th><th>标题</th><th>社团</th><th>CV</th><th>标签</th><th>全年龄</th><th>发售日</th></tr>
+          <tr><th>排名</th><th>封面</th><th>RJ号</th><th>标题</th><th>社团</th><th>CV</th><th>标签</th><th>全年龄</th><th>发售日</th><th>操作</th></tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
@@ -148,7 +204,7 @@ const sendRankPageHtml = (res: ServerResponse): void => {
   </main>
   <script>
     const params = new URLSearchParams(location.search);
-    const state = { page: 1, total: 0 };
+    const state = { page: 1, total: 0, items: [], rjExistsMap: {}, circleExistsMap: {} };
     const ids = ["ranking_type", "rj_code", "title", "circle", "cv", "page_size"];
     const el = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
     el.ranking_type.value = params.get("ranking_type") || "24h";
@@ -168,12 +224,33 @@ const sendRankPageHtml = (res: ServerResponse): void => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "加载失败");
       state.total = data.total || 0;
-      renderRows(data.items || []);
+      state.items = data.items || [];
+      await refreshExistsMaps(state.items);
+      renderRows();
       renderPager();
       document.getElementById("summary").textContent = data.ranking_type + " 排行榜，共 " + state.total + " 条";
     }
 
-    function renderRows(items) {
+    async function postJson(url, body) {
+      const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "操作失败");
+      return data;
+    }
+
+    async function refreshExistsMaps(items) {
+      const rjCodes = [...new Set(items.map(item => item.rj_code).filter(Boolean))];
+      const circleNames = [...new Set(items.map(item => item.circle).filter(Boolean))];
+      const [rjData, circleData] = await Promise.all([
+        rjCodes.length ? postJson("/api/rj/check", { rj_codes: rjCodes }) : Promise.resolve({ exists: {} }),
+        circleNames.length ? postJson("/api/circle/check", { names: circleNames }) : Promise.resolve({ exists: {} }),
+      ]);
+      state.rjExistsMap = rjData.exists || {};
+      state.circleExistsMap = circleData.exists || {};
+    }
+
+    function renderRows() {
+      const items = state.items;
       const tbody = document.getElementById("rows");
       tbody.innerHTML = items.map(item => '<tr>' +
         '<td>' + escapeHtml(item.rank ?? "-") + '</td>' +
@@ -185,8 +262,20 @@ const sendRankPageHtml = (res: ServerResponse): void => {
         '<td><div class="tags">' + (item.tags || []).map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div></td>' +
         '<td>' + (item.is_all_ages ? '是' : '否') + '</td>' +
         '<td>' + escapeHtml(item.release_date || "") + '</td>' +
+        '<td>' + actionButtons(item) + '</td>' +
       '</tr>').join('');
-      if (!items.length) tbody.innerHTML = '<tr><td colspan="9">暂无数据</td></tr>';
+      if (!items.length) tbody.innerHTML = '<tr><td colspan="10">暂无数据</td></tr>';
+    }
+
+    function actionButtons(item) {
+      const rjCode = item.rj_code || "";
+      const circle = item.circle || "";
+      const rjExists = !!state.rjExistsMap[rjCode];
+      const circleExists = !!state.circleExistsMap[circle];
+      return '<div class="actions">' +
+        (rjCode ? '<button data-action="' + (rjExists ? 'remove-rj' : 'add-rj') + '" data-rj="' + escapeHtml(rjCode) + '" class="' + (rjExists ? 'remove' : '') + '">' + (rjExists ? '移除RJ' : '添加RJ') + '</button>' : '') +
+        (circle ? '<button data-action="' + (circleExists ? 'remove-circle' : 'add-circle') + '" data-circle="' + escapeHtml(circle) + '" class="' + (circleExists ? 'remove' : '') + '">' + (circleExists ? '移除社团' : '添加社团') + '</button>' : '') +
+      '</div>';
     }
 
     function renderPager() {
@@ -206,6 +295,37 @@ const sendRankPageHtml = (res: ServerResponse): void => {
       document.getElementById("summary").innerHTML = '<span class="error">' + escapeHtml(error.message || error) + '</span>';
     }
 
+    async function handleAction(event) {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const action = button.dataset.action;
+      const rjCode = button.dataset.rj;
+      const circle = button.dataset.circle;
+      const item = state.items.find(row => row.rj_code === rjCode || row.circle === circle) || {};
+      button.disabled = true;
+      try {
+        if (action === "add-rj" && rjCode) {
+          await postJson("/api/rj/add", { rj_code: rjCode, ranking_type: el.ranking_type.value });
+          state.rjExistsMap[rjCode] = true;
+        } else if (action === "remove-rj" && rjCode) {
+          await postJson("/api/rj/remove", { rj_code: rjCode });
+          state.rjExistsMap[rjCode] = false;
+        } else if (action === "add-circle" && circle) {
+          await postJson("/api/circle/add", { name: circle, circle_url: item.circle_url });
+          state.circleExistsMap[circle] = true;
+        } else if (action === "remove-circle" && circle) {
+          await postJson("/api/circle/remove", { name: circle });
+          state.circleExistsMap[circle] = false;
+        }
+        renderRows();
+        document.getElementById("summary").textContent = "操作成功";
+      } catch (error) {
+        showError(error);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     document.getElementById("search").onclick = () => { state.page = 1; loadRanking().catch(showError); };
     document.getElementById("reset").onclick = () => {
       el.ranking_type.value = "24h";
@@ -218,6 +338,7 @@ const sendRankPageHtml = (res: ServerResponse): void => {
     };
     document.getElementById("prev").onclick = () => { if (state.page > 1) { state.page--; loadRanking().catch(showError); } };
     document.getElementById("next").onclick = () => { state.page++; loadRanking().catch(showError); };
+    document.getElementById("rows").onclick = event => { handleAction(event).catch(showError); };
     ids.forEach(id => el[id].addEventListener(id === "page_size" || id === "ranking_type" ? "change" : "input", debouncedSearch));
     loadRanking().catch(showError);
   </script>
