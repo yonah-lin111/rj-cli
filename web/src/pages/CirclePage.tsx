@@ -588,7 +588,8 @@ export default function CirclePage() {
                           <TableHead className="w-20">封面</TableHead>
                           <TableHead>RJ号</TableHead>
                           <TableHead>标题</TableHead>
-                          <TableHead>发售日</TableHead>
+                          <TableHead>CV</TableHead>
+                          <TableHead>标签</TableHead>
                           <TableHead className="w-28">分级</TableHead>
                           <TableHead className="w-24 sticky right-0 bg-card">
                             操作
@@ -641,7 +642,16 @@ export default function CirclePage() {
                                 )}
                               </TableCell>
                               <TableCell className="text-muted-foreground text-sm">
-                                {w.release_date ?? "-"}
+                                {w.cv ?? "-"}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                  {w.tags.map((t) => (
+                                    <Badge key={t} variant="secondary">
+                                      {t}
+                                    </Badge>
+                                  ))}
+                                </div>
                               </TableCell>
                               <TableCell>
                                 <Badge
@@ -676,7 +686,7 @@ export default function CirclePage() {
                           latestWorks.length === 0 && (
                             <TableRow>
                               <TableCell
-                                colSpan={6}
+                                colSpan={7}
                                 className="text-center text-muted-foreground py-8"
                               >
                                 暂无作品
@@ -686,7 +696,7 @@ export default function CirclePage() {
                         {latestStatus.type === "loading" && (
                           <TableRow>
                             <TableCell
-                              colSpan={6}
+                              colSpan={7}
                               className="text-center text-muted-foreground py-8"
                             >
                               加载中...

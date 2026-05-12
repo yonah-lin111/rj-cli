@@ -74,6 +74,8 @@ export interface CircleLatestWork {
   thumbnail: string | null;
   release_date: string | null;
   is_all_ages: boolean;
+  cv: string | null;
+  tags: string[];
 }
 
 export interface CircleLatestWorksResponse {

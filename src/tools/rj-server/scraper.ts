@@ -143,6 +143,8 @@ export interface CircleWorkItem {
   thumbnail: string | null;
   release_date: string | null;
   is_all_ages: boolean;
+  cv: string | null;
+  tags: string[];
 }
 
 export const scrapeCircleLatestWorks = async (circleUrl: string, limit = 10): Promise<CircleWorkItem[]> => {
@@ -168,6 +170,14 @@ export const scrapeCircleLatestWorks = async (circleUrl: string, limit = 10): Pr
         if (m) releaseDate = `${m[1]}/${m[2]}/${m[3]}`;
       }
       const isAllAges = !!row.querySelector("span.icon_GEN");
+      const makerName = row.querySelector("dd.maker_name");
+      let cv: string | null = null;
+      if (makerName) {
+        const cvLinks = makerName.querySelectorAll("a[href*='keyword_creater']");
+        if (cvLinks.length > 0) cv = cvLinks.map((a: HTMLElement) => a.text.trim()).join("、");
+      }
+      const tagLinks = row.querySelectorAll("dd.search_tag a");
+      const tags = tagLinks.map((a: HTMLElement) => a.text.trim()).filter(Boolean);
       items.push({
         rj_code: rjCode,
         title: titleLink.getAttribute("title")?.trim() || titleLink.text.trim(),
@@ -175,6 +185,8 @@ export const scrapeCircleLatestWorks = async (circleUrl: string, limit = 10): Pr
         thumbnail: buildThumbnailUrl(rjCode),
         release_date: releaseDate,
         is_all_ages: isAllAges,
+        cv,
+        tags,
       });
     }
     return items;
