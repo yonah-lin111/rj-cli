@@ -144,9 +144,10 @@ const sendRankPageHtml = (res: ServerResponse): void => {
     input, select, button { height: 36px; border-radius: 8px; border: 1px solid var(--line); background: #0b1220; color: var(--text); padding: 0 10px; font-size: 14px; }
     button { cursor: pointer; background: #0e7490; border-color: #0891b2; font-weight: 600; }
     button.secondary { background: #1f2937; border-color: #334155; }
+    .toolbar { display: flex; justify-content: flex-end; margin: 0 0 12px; }
     .summary { margin: 8px 0 12px; color: var(--muted); font-size: 13px; }
     .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; min-width: 1280px; }
+    table { width: 100%; border-collapse: collapse; min-width: var(--table-min-width, 780px); }
     th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; font-size: 13px; }
     th { position: sticky; top: 0; background: #111827; color: #cbd5e1; white-space: nowrap; }
     tr:hover td { background: rgba(56, 189, 248, .06); }
@@ -188,10 +189,13 @@ const sendRankPageHtml = (res: ServerResponse): void => {
       <button id="reset" class="secondary">重置</button>
     </section>
     <div id="summary" class="summary">加载中...</div>
+    <div class="toolbar">
+      <button id="toggle_details" class="secondary">显示表格信息</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>排名</th><th>封面</th><th>RJ号</th><th>标题</th><th>社团</th><th>CV</th><th>标签</th><th>全年龄</th><th>发售日</th><th>操作</th></tr>
+          <tr><th>排名</th><th>RJ号</th><th>社团</th><th>CV</th><th>发售日</th><th>操作</th></tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
@@ -204,7 +208,7 @@ const sendRankPageHtml = (res: ServerResponse): void => {
   </main>
   <script>
     const params = new URLSearchParams(location.search);
-    const state = { page: 1, total: 0, items: [], rjExistsMap: {}, circleExistsMap: {} };
+    const state = { page: 1, total: 0, items: [], rjExistsMap: {}, circleExistsMap: {}, showDetails: false };
     const ids = ["ranking_type", "rj_code", "title", "circle", "cv", "page_size"];
     const el = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
     el.ranking_type.value = params.get("ranking_type") || "24h";
@@ -252,19 +256,35 @@ const sendRankPageHtml = (res: ServerResponse): void => {
     function renderRows() {
       const items = state.items;
       const tbody = document.getElementById("rows");
-      tbody.innerHTML = items.map(item => '<tr>' +
-        '<td>' + escapeHtml(item.rank ?? "-") + '</td>' +
-        '<td>' + (item.thumbnail ? '<img class="thumb" src="' + escapeHtml(item.thumbnail) + '" loading="lazy">' : '') + '</td>' +
-        '<td>' + escapeHtml(item.rj_code) + '</td>' +
-        '<td>' + link(item.title_url, item.title) + '</td>' +
-        '<td>' + link(item.circle_url, item.circle || "") + '</td>' +
-        '<td>' + escapeHtml(item.cv || "") + '</td>' +
-        '<td><div class="tags">' + (item.tags || []).map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div></td>' +
-        '<td>' + (item.is_all_ages ? '是' : '否') + '</td>' +
-        '<td>' + escapeHtml(item.release_date || "") + '</td>' +
-        '<td>' + actionButtons(item) + '</td>' +
-      '</tr>').join('');
-      if (!items.length) tbody.innerHTML = '<tr><td colspan="10">暂无数据</td></tr>';
+      const headers = state.showDetails
+        ? ["排名", "封面", "RJ号", "标题", "社团", "CV", "标签", "全年龄", "发售日", "操作"]
+        : ["排名", "RJ号", "社团", "CV", "发售日", "操作"];
+      document.querySelector("thead tr").innerHTML = headers.map(header => '<th>' + header + '</th>').join('');
+      document.querySelector("table").style.setProperty("--table-min-width", state.showDetails ? "1280px" : "780px");
+      document.getElementById("toggle_details").textContent = state.showDetails ? "隐藏表格信息" : "显示表格信息";
+      tbody.innerHTML = items.map(item => {
+        const commonCells =
+          '<td>' + escapeHtml(item.rank ?? "-") + '</td>' +
+          '<td>' + escapeHtml(item.rj_code) + '</td>' +
+          '<td>' + link(item.circle_url, item.circle || "") + '</td>' +
+          '<td>' + escapeHtml(item.cv || "") + '</td>' +
+          '<td>' + escapeHtml(item.release_date || "") + '</td>' +
+          '<td>' + actionButtons(item) + '</td>';
+        if (!state.showDetails) return '<tr>' + commonCells + '</tr>';
+        return '<tr>' +
+          '<td>' + escapeHtml(item.rank ?? "-") + '</td>' +
+          '<td>' + (item.thumbnail ? '<img class="thumb" src="' + escapeHtml(item.thumbnail) + '" loading="lazy">' : '') + '</td>' +
+          '<td>' + escapeHtml(item.rj_code) + '</td>' +
+          '<td>' + link(item.title_url, item.title) + '</td>' +
+          '<td>' + link(item.circle_url, item.circle || "") + '</td>' +
+          '<td>' + escapeHtml(item.cv || "") + '</td>' +
+          '<td><div class="tags">' + (item.tags || []).map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('') + '</div></td>' +
+          '<td>' + (item.is_all_ages ? '是' : '否') + '</td>' +
+          '<td>' + escapeHtml(item.release_date || "") + '</td>' +
+          '<td>' + actionButtons(item) + '</td>' +
+        '</tr>';
+      }).join('');
+      if (!items.length) tbody.innerHTML = '<tr><td colspan="' + headers.length + '">暂无数据</td></tr>';
     }
 
     function actionButtons(item) {
@@ -327,6 +347,7 @@ const sendRankPageHtml = (res: ServerResponse): void => {
     }
 
     document.getElementById("search").onclick = () => { state.page = 1; loadRanking().catch(showError); };
+    document.getElementById("toggle_details").onclick = () => { state.showDetails = !state.showDetails; renderRows(); };
     document.getElementById("reset").onclick = () => {
       el.ranking_type.value = "24h";
       el.rj_code.value = "";
