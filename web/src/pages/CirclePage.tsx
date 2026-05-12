@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 const PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"];
 
@@ -45,6 +46,7 @@ export default function CirclePage() {
   const [worksTotal, setWorksTotal] = useState(0);
   const [works, setWorks] = useState<CircleWork[]>([]);
   const [worksStatus, setWorksStatus] = useState<{ type: "idle" | "loading" | "error" | "ok"; msg?: string }>({ type: "idle" });
+  const [showWorksDetails, setShowWorksDetails] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -259,10 +261,13 @@ export default function CirclePage() {
                 </div>
               </div>
 
-              <div className="text-sm text-muted-foreground mb-2 h-5">
-                {worksStatus.type === "loading" ? "加载中..." : worksStatus.type === "error"
-                  ? <span className="text-destructive">{worksStatus.msg}</span>
-                  : worksStatus.msg}
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-sm h-5 ${worksStatus.type === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                  {worksStatus.type === "loading" ? "加载中..." : (worksStatus.msg ?? "")}
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setShowWorksDetails((v) => !v)}>
+                  {showWorksDetails ? "隐藏详情" : "显示详情"}
+                </Button>
               </div>
 
               <div className="rounded-lg border border-border overflow-auto">
@@ -270,9 +275,13 @@ export default function CirclePage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>RJ号</TableHead>
+                      {showWorksDetails && <TableHead className="w-20">封面</TableHead>}
                       <TableHead>标题</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead>发售日</TableHead>
+                      {showWorksDetails && <TableHead>标签</TableHead>}
+                      {showWorksDetails && <TableHead>来源</TableHead>}
+                      {showWorksDetails && <TableHead>添加时间</TableHead>}
                       <TableHead className="w-20">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -284,9 +293,39 @@ export default function CirclePage() {
                             ? <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{w.rj_code}</a>
                             : w.rj_code}
                         </TableCell>
-                        <TableCell className="max-w-xs truncate text-sm">{w.title ?? "-"}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{w.status ?? "-"}</TableCell>
+                        {showWorksDetails && (
+                          <TableCell>
+                            {w.thumbnail ? (
+                              <img src={w.thumbnail} alt={w.rj_code} className="w-14 h-14 object-cover rounded-md bg-muted" />
+                            ) : (
+                              <div className="w-14 h-14 rounded-md bg-muted" />
+                            )}
+                          </TableCell>
+                        )}
+                        <TableCell className="max-w-xs text-sm">
+                          {w.title_url ? (
+                            <a href={w.title_url} target="_blank" rel="noreferrer" className="text-primary hover:underline line-clamp-2">{w.title ?? "-"}</a>
+                          ) : (
+                            <span className="line-clamp-2">{w.title ?? "-"}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{w.status === 0 ? "待下载" : w.status === 1 ? "已下载" : w.status === 2 ? "已删除" : (w.status ?? "-")}</TableCell>
                         <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{w.release_date ?? "-"}</TableCell>
+                        {showWorksDetails && (
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1 max-w-[240px]">
+                              {w.tags.map((t) => (
+                                <Badge key={t} variant="secondary">{t}</Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                        )}
+                        {showWorksDetails && (
+                          <TableCell className="text-muted-foreground text-sm">{w.source ?? "-"}</TableCell>
+                        )}
+                        {showWorksDetails && (
+                          <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{w.added_at ?? "-"}</TableCell>
+                        )}
                         <TableCell>
                           <Button size="sm" variant="destructive" onClick={() => void handleRemoveWork(w.rj_code)}>移除</Button>
                         </TableCell>
@@ -294,7 +333,7 @@ export default function CirclePage() {
                     ))}
                     {works.length === 0 && worksStatus.type !== "loading" && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">暂无作品</TableCell>
+                        <TableCell colSpan={showWorksDetails ? 9 : 5} className="text-center text-muted-foreground py-8">暂无作品</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

@@ -51,11 +51,11 @@ export interface CircleWork {
   rj_code: string;
   title?: string;
   title_url?: string;
-  status?: string;
+  status?: number;
   source?: string;
   tags: string[];
   release_date?: string;
-  thumbnail_url?: string;
+  thumbnail?: string;
   nsfw?: boolean;
   added_at?: string;
 }
