@@ -56,7 +56,11 @@ export class Footer implements Component {
     }
 
     const lines = [stats];
-    if (state.prompt) lines.push(theme.systemPrompt(truncateToWidth(state.prompt, width, theme.dim("..."))));
+    if (state.prompt) {
+      for (const promptLine of state.prompt.split(/\r?\n/)) {
+        lines.push(theme.systemPrompt(truncateToWidth(promptLine, width, theme.dim("..."))));
+      }
+    }
     return lines;
   }
 
