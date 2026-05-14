@@ -46,6 +46,10 @@ import {
 } from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"];
+const DETAIL_TOGGLE_LABELS = {
+  show: "Show Details",
+  hide: "Hide Details",
+} as const;
 
 function getInitialParams() {
   const p = new URLSearchParams(location.search);
@@ -153,7 +157,7 @@ export default function CirclePage() {
         });
         setTotal(data.total);
         setCircles(data.data);
-        setListStatus({ type: "ok", msg: `共 ${data.total} 条` });
+        setListStatus({ type: "ok", msg: `Total ${data.total}` });
       } catch (err) {
         setListStatus({
           type: "error",
@@ -183,7 +187,7 @@ export default function CirclePage() {
         });
         setWorksTotal(data.total);
         setWorks(data.data);
-        setWorksStatus({ type: "ok", msg: `共 ${data.total} 条` });
+        setWorksStatus({ type: "ok", msg: `Total ${data.total}` });
       } catch (err) {
         setWorksStatus({
           type: "error",
@@ -210,7 +214,7 @@ export default function CirclePage() {
     try {
       const data = await fetchCircleLatestWorks(circleName, 20);
       setLatestWorks(data.items);
-      setLatestStatus({ type: "ok", msg: `共 ${data.items.length} 条` });
+      setLatestStatus({ type: "ok", msg: `Total ${data.items.length}` });
       if (data.items.length > 0) {
         const codes = data.items.map((w) => w.rj_code);
         const res = await postJson<{ exists: Record<string, boolean> }>(
@@ -243,7 +247,7 @@ export default function CirclePage() {
       const q = new URLSearchParams({ name: circleName });
       const res = await fetch(`/api/circle/detail?${q}`);
       const d = (await res.json()) as CircleDetail & { error?: string };
-      if (!res.ok) throw new Error(d.error ?? "加载失败");
+      if (!res.ok) throw new Error(d.error ?? "Load failed");
       setEditDetail(d);
       setEditNickname(d.nickname ?? "");
       setEditUrl(d.circle_url ?? "");
@@ -269,7 +273,7 @@ export default function CirclePage() {
         circle_url: editUrl.trim() || null,
         remark: editRemark.trim() || null,
       });
-      setEditStatus({ type: "ok", msg: "保存成功" });
+      setEditStatus({ type: "ok", msg: "Saved" });
       void loadCircles(page, pageSize, currentFilters);
     } catch (err) {
       setEditStatus({
@@ -280,7 +284,7 @@ export default function CirclePage() {
   };
 
   const handleDeleteCircle = async (circleName: string) => {
-    if (!confirm(`确认删除社团「${circleName}」？`)) return;
+    if (!confirm(`Delete circle \"${circleName}\"?`)) return;
     try {
       await postJson("/api/circle/remove", { name: circleName });
       void loadCircles(page, pageSize, currentFilters);
@@ -351,18 +355,18 @@ export default function CirclePage() {
 
   return (
     <div className="min-h-screen bg-background p-6">
-      <h1 className="text-2xl font-bold mb-5 text-foreground">社团管理</h1>
+      <h1 className="text-2xl font-bold mb-5 text-foreground">Circle Management</h1>
 
       {/* Circle list */}
       <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
         <h2 className="text-base font-semibold mb-4 text-card-foreground">
-          社团列表
+          Circle List
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3 items-end">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">社团名</label>
+            <label className="text-xs text-muted-foreground">Circle Name</label>
             <Input
-              placeholder="模糊查询"
+              placeholder="Search"
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
@@ -371,9 +375,9 @@ export default function CirclePage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">别名</label>
+            <label className="text-xs text-muted-foreground">Alias</label>
             <Input
-              placeholder="模糊查询"
+              placeholder="Search"
               value={nickname}
               onChange={(e) => {
                 setNickname(e.target.value);
@@ -382,9 +386,9 @@ export default function CirclePage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">备注</label>
+            <label className="text-xs text-muted-foreground">Remark</label>
             <Input
-              placeholder="模糊查询"
+              placeholder="Search"
               value={remark}
               onChange={(e) => {
                 setRemark(e.target.value);
@@ -393,7 +397,7 @@ export default function CirclePage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">每页</label>
+            <label className="text-xs text-muted-foreground">Per Page</label>
             <Select
               value={pageSize}
               onValueChange={(v) => {
@@ -421,14 +425,14 @@ export default function CirclePage() {
             }}
           >
             <Search className="w-4 h-4 mr-1.5" />
-            查询
+            Search
           </Button>
         </div>
 
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-muted-foreground h-5">
             {listStatus.type === "loading" ? (
-              "加载中..."
+              "Loading..."
             ) : listStatus.type === "error" ? (
               <span className="text-destructive">{listStatus.msg}</span>
             ) : (
@@ -441,9 +445,9 @@ export default function CirclePage() {
             onClick={() => setShowDetails((v) => !v)}
           >
             {showDetails ? (
-              <><ChevronUp className="w-4 h-4 mr-1.5" />隐藏详情</>
+              <><ChevronUp className="w-4 h-4 mr-1.5" />{DETAIL_TOGGLE_LABELS.hide}</>
             ) : (
-              <><ChevronDown className="w-4 h-4 mr-1.5" />显示详情</>
+              <><ChevronDown className="w-4 h-4 mr-1.5" />{DETAIL_TOGGLE_LABELS.show}</>
             )}
           </Button>
         </div>
@@ -452,12 +456,12 @@ export default function CirclePage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>社团名</TableHead>
-                <TableHead>别名</TableHead>
-                <TableHead className="w-16">RJ数</TableHead>
-                <TableHead>备注</TableHead>
+                <TableHead>Circle Name</TableHead>
+                <TableHead>Alias</TableHead>
+                <TableHead className="w-16">RJ Count</TableHead>
+                <TableHead>Remark</TableHead>
                 <TableHead className="w-64 text-right sticky right-0 bg-card">
-                  操作
+                  Actions
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -482,7 +486,7 @@ export default function CirclePage() {
                         onClick={() => void openLatestWorks(c.name)}
                       >
                         <Clock className="w-3.5 h-3.5 mr-1" />
-                        最近作品
+                        Latest Works
                       </Button>
                       <Button
                         size="sm"
@@ -490,7 +494,7 @@ export default function CirclePage() {
                         onClick={() => openDbWorks(c.name)}
                       >
                         <Database className="w-3.5 h-3.5 mr-1" />
-                        数据库作品
+                        DB Works
                       </Button>
                       <Button
                         size="sm"
@@ -498,7 +502,7 @@ export default function CirclePage() {
                         onClick={() => void openEdit(c.name)}
                       >
                         <Pencil className="w-3.5 h-3.5 mr-1" />
-                        编辑社团
+                        Edit Circle
                       </Button>
                       <Button
                         size="sm"
@@ -506,7 +510,7 @@ export default function CirclePage() {
                         onClick={() => void handleDeleteCircle(c.name)}
                       >
                         <Trash2 className="w-3.5 h-3.5 mr-1" />
-                        删除
+                        Delete
                       </Button>
                     </div>
                   </TableCell>
@@ -518,7 +522,7 @@ export default function CirclePage() {
                     colSpan={5}
                     className="text-center text-muted-foreground py-8"
                   >
-                    暂无数据
+                    No data
                   </TableCell>
                 </TableRow>
               )}
@@ -536,7 +540,7 @@ export default function CirclePage() {
               void loadCircles(page - 1, pageSize, currentFilters);
             }}
           >
-            上一页
+            Previous
           </Button>
           <span>
             {page} / {pages}
@@ -550,7 +554,7 @@ export default function CirclePage() {
               void loadCircles(page + 1, pageSize, currentFilters);
             }}
           >
-            下一页
+            Next
           </Button>
         </div>
       </div>
@@ -570,9 +574,9 @@ export default function CirclePage() {
               <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
               <div className="relative">
                 <h2 className="text-base font-semibold text-card-foreground">
-                  {modal.type === "latest-works" && "最近作品"}
-                  {modal.type === "db-works" && "数据库作品"}
-                  {modal.type === "edit" && "编辑社团"}
+                  {modal.type === "latest-works" && "Latest Works"}
+                  {modal.type === "db-works" && "DB Works"}
+                  {modal.type === "edit" && "Edit Circle"}
                 </h2>
                 <p className="text-sm text-muted-foreground truncate mt-0.5">
                   {modal.circleName}
@@ -593,7 +597,7 @@ export default function CirclePage() {
                 <div>
                   <div className="text-sm text-muted-foreground mb-3 h-5">
                     {latestStatus.type === "loading" ? (
-                      "加载中..."
+                      "Loading..."
                     ) : latestStatus.type === "error" ? (
                       <span className="text-destructive">
                         {latestStatus.msg}
@@ -606,14 +610,14 @@ export default function CirclePage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          {showDetails && <TableHead className="w-20">封面</TableHead>}
-                          <TableHead>RJ号</TableHead>
-                          <TableHead>标题</TableHead>
+                          {showDetails && <TableHead className="w-20">Cover</TableHead>}
+                          <TableHead>RJ Code</TableHead>
+                          <TableHead>Title</TableHead>
                           <TableHead>CV</TableHead>
-                          {showDetails && <TableHead>标签</TableHead>}
-                          {showDetails && <TableHead className="w-28">分级</TableHead>}
+                          {showDetails && <TableHead>Tags</TableHead>}
+                          {showDetails && <TableHead className="w-28">Rating</TableHead>}
                           <TableHead className="w-24 sticky right-0 bg-card">
-                            操作
+                            Actions
                           </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -685,7 +689,7 @@ export default function CirclePage() {
                                       w.is_all_ages ? "secondary" : "outline"
                                     }
                                   >
-                                    {w.is_all_ages ? "全年龄" : "R18"}
+                                    {w.is_all_ages ? "All Ages" : "R18"}
                                   </Badge>
                                 </TableCell>
                               )}
@@ -693,7 +697,7 @@ export default function CirclePage() {
                                 {latestExistsMap[w.rj_code] ? (
                                   <Button size="sm" variant="outline" disabled>
                                     <Check className="w-3.5 h-3.5 mr-1" />
-                                    已入库
+                                    Added
                                   </Button>
                                 ) : (
                                   <Button
@@ -703,7 +707,7 @@ export default function CirclePage() {
                                     onClick={() => void handleAddLatestWork(w)}
                                   >
                                     <Plus className="w-3.5 h-3.5 mr-1" />
-                                    {addingRj[w.rj_code] ? "入库中..." : "入库"}
+                                    {addingRj[w.rj_code] ? "Adding..." : "Add"}
                                   </Button>
                                 )}
                               </TableCell>
@@ -716,7 +720,7 @@ export default function CirclePage() {
                                 colSpan={showDetails ? 7 : 4}
                                 className="text-center text-muted-foreground py-8"
                               >
-                                暂无作品
+                                No works
                               </TableCell>
                             </TableRow>
                           )}
@@ -726,7 +730,7 @@ export default function CirclePage() {
                               colSpan={showDetails ? 7 : 2}
                               className="text-center text-muted-foreground py-8"
                             >
-                              加载中...
+                              Loading...
                             </TableCell>
                           </TableRow>
                         )}
@@ -742,10 +746,10 @@ export default function CirclePage() {
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs text-muted-foreground">
-                        RJ号
+                        RJ Code
                       </label>
                       <Input
-                        placeholder="筛选"
+                        placeholder="Filter"
                         value={worksRjCode}
                         onChange={(e) => {
                           setWorksRjCode(e.target.value);
@@ -761,10 +765,10 @@ export default function CirclePage() {
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs text-muted-foreground">
-                        标题
+                        Title
                       </label>
                       <Input
-                        placeholder="筛选"
+                        placeholder="Filter"
                         value={worksTitle}
                         onChange={(e) => {
                           setWorksTitle(e.target.value);
@@ -784,7 +788,7 @@ export default function CirclePage() {
                       className={`text-sm h-5 ${worksStatus.type === "error" ? "text-destructive" : "text-muted-foreground"}`}
                     >
                       {worksStatus.type === "loading"
-                        ? "加载中..."
+                        ? "Loading..."
                         : (worksStatus.msg ?? "")}
                     </span>
                   </div>
@@ -792,18 +796,18 @@ export default function CirclePage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>RJ号</TableHead>
+                          <TableHead>RJ Code</TableHead>
                           {showDetails && (
-                            <TableHead className="w-20">封面</TableHead>
+                            <TableHead className="w-20">Cover</TableHead>
                           )}
-                          <TableHead>标题</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>发售日</TableHead>
-                          {showDetails && <TableHead>标签</TableHead>}
-                          {showDetails && <TableHead>来源</TableHead>}
-                          {showDetails && <TableHead>添加时间</TableHead>}
+                          <TableHead>Title</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Release Date</TableHead>
+                          {showDetails && <TableHead>Tags</TableHead>}
+                          {showDetails && <TableHead>Source</TableHead>}
+                          {showDetails && <TableHead>Added At</TableHead>}
                           <TableHead className="w-20 sticky right-0 bg-card">
-                            操作
+                            Actions
                           </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -864,10 +868,10 @@ export default function CirclePage() {
                                 }
                               >
                                 {w.status === 1
-                                  ? "已下载"
+                                  ? "Downloaded"
                                   : w.status === 2
-                                    ? "已删除"
-                                    : "未下载"}
+                                    ? "Deleted"
+                                    : "Not Downloaded"}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
@@ -913,7 +917,7 @@ export default function CirclePage() {
                                 onClick={() => void handleRemoveWork(w.rj_code)}
                               >
                                 <Minus className="w-3.5 h-3.5 mr-1" />
-                                移除
+                                Remove
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -925,7 +929,7 @@ export default function CirclePage() {
                                 colSpan={showDetails ? 9 : 5}
                                 className="text-center text-muted-foreground py-8"
                               >
-                                暂无作品
+                                No works
                               </TableCell>
                             </TableRow>
                           )}
@@ -948,7 +952,7 @@ export default function CirclePage() {
                         );
                       }}
                     >
-                      上一页
+                      Previous
                     </Button>
                     <span>
                       {worksPage} / {worksPages}
@@ -968,7 +972,7 @@ export default function CirclePage() {
                         );
                       }}
                     >
-                      下一页
+                      Next
                     </Button>
                   </div>
                 </div>
@@ -992,17 +996,17 @@ export default function CirclePage() {
                     <>
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs text-muted-foreground">
-                          别名
+                          Alias
                         </label>
                         <Input
                           value={editNickname}
                           onChange={(e) => setEditNickname(e.target.value)}
-                          placeholder="别名（可选）"
+                          placeholder="Alias (optional)"
                         />
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs text-muted-foreground">
-                          社团链接
+                          Circle URL
                         </label>
                         <Input
                           value={editUrl}
@@ -1012,12 +1016,12 @@ export default function CirclePage() {
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <label className="text-xs text-muted-foreground">
-                          备注
+                          Remark
                         </label>
                         <Textarea
                           value={editRemark}
                           onChange={(e) => setEditRemark(e.target.value)}
-                          placeholder="备注（可选）"
+                          placeholder="Remark (optional)"
                           rows={3}
                         />
                       </div>
@@ -1026,12 +1030,12 @@ export default function CirclePage() {
                         disabled={editStatus.type === "loading"}
                       >
                         <Save className="w-4 h-4 mr-1.5" />
-                        保存
+                        Save
                       </Button>
                     </>
                   )}
                   {editStatus.type === "loading" && !editDetail && (
-                    <p className="text-sm text-muted-foreground">加载中...</p>
+                    <p className="text-sm text-muted-foreground">Loading...</p>
                   )}
                 </div>
               )}

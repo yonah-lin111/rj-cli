@@ -33,20 +33,20 @@ import {
 
 const PAGE_SIZE_OPTIONS = ["5", "10", "20", "30", "50", "100"];
 const STATUS_OPTIONS = [
-  { value: "all", label: "全部状态" },
-  { value: "0", label: "未下载" },
-  { value: "1", label: "已下载" },
-  { value: "2", label: "已删除" },
+  { value: "all", label: "All Statuses" },
+  { value: "0", label: "Not Downloaded" },
+  { value: "1", label: "Downloaded" },
+  { value: "2", label: "Deleted" },
 ] as const;
 const SOURCE_OPTIONS = [
-  { value: "all", label: "全部来源" },
+  { value: "all", label: "All Sources" },
   { value: "asmrone", label: "asmrone" },
   { value: "mega", label: "mega" },
 ] as const;
 const PRESET_OPTIONS: Array<{ value: WorksQueryPreset; label: string }> = [
-  { value: "all", label: "无" },
-  { value: "latest-undownloaded", label: "最新未下载" },
-  { value: "latest-added", label: "最新添加" },
+  { value: "all", label: "None" },
+  { value: "latest-undownloaded", label: "Latest Undownloaded" },
+  { value: "latest-added", label: "Latest Added" },
 ];
 
 type ModalType = "detail" | "download-links" | null;
@@ -82,9 +82,9 @@ function getInitialParams() {
 }
 
 function statusLabel(status?: number): string {
-  if (status === 1) return "已下载";
-  if (status === 2) return "已删除";
-  return "未下载";
+  if (status === 1) return "Downloaded";
+  if (status === 2) return "Deleted";
+  return "Not Downloaded";
 }
 
 function statusVariant(status?: number): "default" | "secondary" | "outline" {
@@ -104,10 +104,10 @@ function formatJson(value: DownloadLinksValue): string {
 }
 
 function downloadLinksSummary(value: DownloadLinksValue): string {
-  if (value == null) return "无";
-  if (typeof value === "string") return value.trim() ? "原始文本" : "无";
-  if (Array.isArray(value)) return `${value.length} 项`;
-  return `${Object.keys(value).length} 项`;
+  if (value == null) return "None";
+  if (typeof value === "string") return value.trim() ? "Raw Text" : "None";
+  if (Array.isArray(value)) return `${value.length} items`;
+  return `${Object.keys(value).length} items`;
 }
 
 export default function WorksPage() {
@@ -187,7 +187,7 @@ export default function WorksPage() {
         });
         setTotal(data.total);
         setItems(data.data);
-        setStatus({ type: "ok", msg: `共 ${data.total} 条` });
+        setStatus({ type: "ok", msg: `Total ${data.total}` });
       } catch (err) {
         setStatus({
           type: "error",
@@ -239,11 +239,11 @@ export default function WorksPage() {
   const closeModal = () => setModal({ type: null, item: null });
 
   const handleRemoveWork = async (item: WorkItem) => {
-    if (!confirm(`确认删除作品「${item.rj_code}」？`)) return;
+      if (!confirm(`Delete work \"${item.rj_code}\"?`)) return;
     setActionLoading((prev) => ({ ...prev, [item.rj_code]: true }));
     try {
       await postJson("/api/rj/remove", { rj_code: item.rj_code });
-      setStatus({ type: "ok", msg: `已删除 ${item.rj_code}` });
+      setStatus({ type: "ok", msg: `Deleted ${item.rj_code}` });
       void load(page, pageSize, currentFilters);
       closeModal();
     } catch (err) {
@@ -262,11 +262,11 @@ export default function WorksPage() {
 
   return (
     <div className="min-h-screen bg-background p-6">
-      <h1 className="mb-5 text-2xl font-bold text-foreground">作品管理</h1>
+      <h1 className="mb-5 text-2xl font-bold text-foreground">Works Management</h1>
       <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7 mb-4 items-end">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">预设查询</label>
+            <label className="text-xs text-muted-foreground">Preset</label>
             <Select
               value={preset}
               onValueChange={(value) => {
@@ -289,9 +289,9 @@ export default function WorksPage() {
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">社团</label>
+            <label className="text-xs text-muted-foreground">Circle</label>
             <Input
-              placeholder="模糊查询社团"
+              placeholder="Search circle"
               value={circle}
               onChange={(e) => {
                 const value = e.target.value;
@@ -301,9 +301,9 @@ export default function WorksPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">RJ号</label>
+            <label className="text-xs text-muted-foreground">RJ Code</label>
             <Input
-              placeholder="输入 RJ 号"
+              placeholder="Enter RJ code"
               value={rjCode}
               onChange={(e) => {
                 const value = e.target.value;
@@ -313,9 +313,9 @@ export default function WorksPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">标题</label>
+            <label className="text-xs text-muted-foreground">Title</label>
             <Input
-              placeholder="模糊查询标题"
+              placeholder="Search title"
               value={title}
               onChange={(e) => {
                 const value = e.target.value;
@@ -325,7 +325,7 @@ export default function WorksPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">来源</label>
+            <label className="text-xs text-muted-foreground">Source</label>
             <Select
               value={source}
               onValueChange={(value) => {
@@ -347,7 +347,7 @@ export default function WorksPage() {
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">状态</label>
+            <label className="text-xs text-muted-foreground">Status</label>
             <Select
               value={statusFilter}
               onValueChange={(value) => {
@@ -369,7 +369,7 @@ export default function WorksPage() {
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">每页</label>
+            <label className="text-xs text-muted-foreground">Per Page</label>
             <Select
               value={pageSize}
               onValueChange={(value) => {
@@ -391,16 +391,16 @@ export default function WorksPage() {
             </Select>
           </div>
           <Button onClick={() => triggerSearch(1)}>
-            <Search className="mr-1.5 h-4 w-4" />查询
+            <Search className="mr-1.5 h-4 w-4" />Search
           </Button>
           <Button variant="outline" onClick={handleReset}>
-            <RotateCcw className="mr-1.5 h-4 w-4" />重置
+            <RotateCcw className="mr-1.5 h-4 w-4" />Reset
           </Button>
         </div>
 
         <div className="mb-3 flex items-center justify-between">
           <span className={`text-sm ${status.type === "error" ? "text-destructive" : "text-muted-foreground"}`}>
-            {status.type === "loading" ? "加载中..." : (status.msg ?? "")}
+            {status.type === "loading" ? "Loading..." : (status.msg ?? "")}
           </span>
           <Button
             variant="outline"
@@ -408,9 +408,9 @@ export default function WorksPage() {
             onClick={() => setShowDetails((value) => !value)}
           >
             {showDetails ? (
-              <><ChevronUp className="mr-1.5 h-4 w-4" />隐藏详情</>
+              <><ChevronUp className="mr-1.5 h-4 w-4" />Hide Details</>
             ) : (
-              <><ChevronDown className="mr-1.5 h-4 w-4" />显示详情</>
+              <><ChevronDown className="mr-1.5 h-4 w-4" />Show Details</>
             )}
           </Button>
         </div>
@@ -419,15 +419,15 @@ export default function WorksPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>RJ号</TableHead>
-                {showDetails && <TableHead className="w-20">封面</TableHead>}
-                <TableHead>标题</TableHead>
-                <TableHead>社团</TableHead>
-                <TableHead>状态</TableHead>
-                {showDetails && <TableHead>来源</TableHead>}
-                {showDetails && <TableHead>创建时间</TableHead>}
-                <TableHead>下载链接</TableHead>
-                <TableHead className="sticky right-0 w-40 bg-card">操作</TableHead>
+                <TableHead>RJ Code</TableHead>
+                {showDetails && <TableHead className="w-20">Cover</TableHead>}
+                <TableHead>Title</TableHead>
+                <TableHead>Circle</TableHead>
+                <TableHead>Status</TableHead>
+                {showDetails && <TableHead>Source</TableHead>}
+                {showDetails && <TableHead>Created At</TableHead>}
+                <TableHead>Download Links</TableHead>
+                <TableHead className="sticky right-0 w-40 bg-card">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -518,12 +518,12 @@ export default function WorksPage() {
                         variant="outline"
                         onClick={() => setModal({ type: "detail", item })}
                       >
-                        <Eye className="mr-1 h-3.5 w-3.5" />查看详情
+                        <Eye className="mr-1 h-3.5 w-3.5" />View Details
                       </Button>
                       {item.title_url && (
                         <Button size="sm" variant="outline" asChild>
                           <a href={item.title_url} target="_blank" rel="noreferrer">
-                            <ExternalLink className="mr-1 h-3.5 w-3.5" />打开链接
+                            <ExternalLink className="mr-1 h-3.5 w-3.5" />Open Link
                           </a>
                         </Button>
                       )}
@@ -533,7 +533,7 @@ export default function WorksPage() {
                         disabled={actionLoading[item.rj_code]}
                         onClick={() => void handleRemoveWork(item)}
                       >
-                        <Trash2 className="mr-1 h-3.5 w-3.5" />删除作品
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />Delete Work
                       </Button>
                     </div>
                   </TableCell>
@@ -545,7 +545,7 @@ export default function WorksPage() {
                     colSpan={showDetails ? 8 : 6}
                     className="py-10 text-center text-muted-foreground"
                   >
-                    暂无数据
+                    No data
                   </TableCell>
                 </TableRow>
               )}
@@ -563,7 +563,7 @@ export default function WorksPage() {
               void load(page - 1, pageSize, currentFilters);
             }}
           >
-            上一页
+            Previous
           </Button>
           <span>{page} / {pages}</span>
           <Button
@@ -575,7 +575,7 @@ export default function WorksPage() {
               void load(page + 1, pageSize, currentFilters);
             }}
           >
-            下一页
+            Next
           </Button>
         </div>
       </div>
@@ -594,7 +594,7 @@ export default function WorksPage() {
               <div className="relative flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-base font-semibold text-card-foreground">
-                    {modal.type === "detail" ? "作品详情" : "下载链接"}
+                    {modal.type === "detail" ? "Work Details" : "Download Links"}
                   </h2>
                   <p className="mt-0.5 text-sm text-muted-foreground">{modalItem.rj_code}</p>
                 </div>
@@ -622,7 +622,7 @@ export default function WorksPage() {
                     )}
                     <div className="flex-1 space-y-2">
                       <div>
-                        <p className="text-xs text-muted-foreground">标题</p>
+                        <p className="text-xs text-muted-foreground">Title</p>
                         {modalItem.title_url ? (
                           <a
                             href={modalItem.title_url}
@@ -638,15 +638,15 @@ export default function WorksPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                          <p className="text-xs text-muted-foreground">RJ号</p>
+                          <p className="text-xs text-muted-foreground">RJ Code</p>
                           <p>{modalItem.rj_code}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">状态</p>
+                          <p className="text-xs text-muted-foreground">Status</p>
                           <Badge variant={statusVariant(modalItem.status)}>{statusLabel(modalItem.status)}</Badge>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">社团</p>
+                          <p className="text-xs text-muted-foreground">Circle</p>
                           {modalItem.circle_url ? (
                             <a
                               href={modalItem.circle_url}
@@ -665,15 +665,15 @@ export default function WorksPage() {
                           <p>{modalItem.cv ?? "-"}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">发售日期</p>
+                          <p className="text-xs text-muted-foreground">Release Date</p>
                           <p>{modalItem.release_date ?? "-"}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">来源</p>
+                          <p className="text-xs text-muted-foreground">Source</p>
                           <p>{modalItem.source ?? "-"}</p>
                         </div>
                         <div className="col-span-2">
-                          <p className="text-xs text-muted-foreground">创建时间</p>
+                          <p className="text-xs text-muted-foreground">Created At</p>
                           <p>{modalItem.created_at ?? "-"}</p>
                         </div>
                       </div>
@@ -681,14 +681,14 @@ export default function WorksPage() {
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs text-muted-foreground">标签</p>
+                    <p className="mb-2 text-xs text-muted-foreground">Tags</p>
                     <div className="flex flex-wrap gap-2">
                       {modalItem.tags.length > 0 ? (
                         modalItem.tags.map((tag) => (
                           <Badge key={tag} variant="secondary">{tag}</Badge>
                         ))
                       ) : (
-                        <span className="text-sm text-muted-foreground">无标签</span>
+                        <span className="text-sm text-muted-foreground">No tags</span>
                       )}
                     </div>
                   </div>
@@ -699,7 +699,7 @@ export default function WorksPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm text-muted-foreground">
-                      {modalItem.download_links == null ? "当前作品没有下载链接。" : "支持复制当前内容。"}
+                      {modalItem.download_links == null ? "No download links for this work." : "You can copy the content below."}
                     </span>
                     {modalItem.download_links != null && (
                       <Button
@@ -707,13 +707,13 @@ export default function WorksPage() {
                         variant="outline"
                         onClick={() => void navigator.clipboard.writeText(modalDownloadLinksText)}
                       >
-                        复制
+                        Copy
                       </Button>
                     )}
                   </div>
                   {modalItem.download_links == null ? (
                     <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                      无下载链接
+                      No download links
                     </div>
                   ) : (
                     <pre className="overflow-x-auto rounded-lg border border-border bg-muted/30 p-4 text-xs leading-6 text-card-foreground whitespace-pre-wrap break-all">

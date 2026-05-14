@@ -33,6 +33,13 @@ const PAGE_SIZE_OPTIONS = [
   "100",
 ];
 
+const RANKING_TYPE_LABELS: Record<RankingType, string> = {
+  "24h": "Day",
+  "7d": "Week",
+  "30d": "Month",
+  year: "Year",
+};
+
 function getInitialParams() {
   const p = new URLSearchParams(location.search);
   return {
@@ -106,7 +113,7 @@ export default function RankPage() {
         });
         setTotal(data.total);
         setItems(data.items);
-        setStatus({ type: "ok", msg: `共 ${data.total} 条` });
+        setStatus({ type: "ok", msg: `Total ${data.total}` });
 
         const rjCodes = data.items.map((i) => i.rj_code);
         const circles = [
@@ -188,7 +195,7 @@ export default function RankPage() {
         await postJson("/api/circle/remove", { name: item.circle });
         setCircleExistsMap((prev) => ({ ...prev, [item.circle!]: false }));
       }
-      setStatus({ type: "ok", msg: "操作成功" });
+      setStatus({ type: "ok", msg: "Action completed" });
     } catch (err) {
       setStatus({
         type: "error",
@@ -203,12 +210,12 @@ export default function RankPage() {
 
   return (
     <div className="min-h-screen bg-background p-6">
-      <h1 className="text-2xl font-bold mb-5 text-foreground">RJ 排行榜</h1>
+      <h1 className="text-2xl font-bold mb-5 text-foreground">RJ Rankings</h1>
       <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
         {/* Filters */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-4 items-end">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">排行</label>
+            <label className="text-xs text-muted-foreground">Ranking</label>
             <Select
               value={rankingType}
               onValueChange={(v) => {
@@ -220,17 +227,17 @@ export default function RankPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="24h">天</SelectItem>
-                <SelectItem value="7d">周</SelectItem>
-                <SelectItem value="30d">月</SelectItem>
-                <SelectItem value="year">年</SelectItem>
+                <SelectItem value="24h">{RANKING_TYPE_LABELS["24h"]}</SelectItem>
+                <SelectItem value="7d">{RANKING_TYPE_LABELS["7d"]}</SelectItem>
+                <SelectItem value="30d">{RANKING_TYPE_LABELS["30d"]}</SelectItem>
+                <SelectItem value="year">{RANKING_TYPE_LABELS.year}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">RJ号</label>
+            <label className="text-xs text-muted-foreground">RJ Code</label>
             <Input
-              placeholder="输入 RJ 号"
+              placeholder="Enter RJ code"
               value={rjCode}
               onChange={(e) => {
                 setRjCode(e.target.value);
@@ -239,9 +246,9 @@ export default function RankPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">标题</label>
+            <label className="text-xs text-muted-foreground">Title</label>
             <Input
-              placeholder="模糊查询标题"
+              placeholder="Search title"
               value={title}
               onChange={(e) => {
                 setTitle(e.target.value);
@@ -250,9 +257,9 @@ export default function RankPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">社团</label>
+            <label className="text-xs text-muted-foreground">Circle</label>
             <Input
-              placeholder="模糊查询社团"
+              placeholder="Search circle"
               value={circle}
               onChange={(e) => {
                 setCircle(e.target.value);
@@ -263,7 +270,7 @@ export default function RankPage() {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs text-muted-foreground">CV</label>
             <Input
-              placeholder="模糊查询 CV"
+              placeholder="Search CV"
               value={cv}
               onChange={(e) => {
                 setCv(e.target.value);
@@ -272,7 +279,7 @@ export default function RankPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">每页</label>
+            <label className="text-xs text-muted-foreground">Per Page</label>
             <Select
               value={pageSize}
               onValueChange={(v) => {
@@ -292,9 +299,9 @@ export default function RankPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => triggerSearch(1)}><Search className="w-4 h-4 mr-1.5" />查询</Button>
+          <Button onClick={() => triggerSearch(1)}><Search className="w-4 h-4 mr-1.5" />Search</Button>
           <Button variant="outline" onClick={handleReset}>
-            <RotateCcw className="w-4 h-4 mr-1.5" />重置
+            <RotateCcw className="w-4 h-4 mr-1.5" />Reset
           </Button>
         </div>
 
@@ -303,14 +310,14 @@ export default function RankPage() {
           <span
             className={`text-sm ${status.type === "error" ? "text-destructive" : "text-muted-foreground"}`}
           >
-            {status.type === "loading" ? "加载中..." : (status.msg ?? "")}
+            {status.type === "loading" ? "Loading..." : (status.msg ?? "")}
           </span>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowDetails((v) => !v)}
           >
-          {showDetails ? <><ChevronUp className="w-4 h-4 mr-1.5" />隐藏详情</> : <><ChevronDown className="w-4 h-4 mr-1.5" />显示详情</>}
+          {showDetails ? <><ChevronUp className="w-4 h-4 mr-1.5" />Hide Details</> : <><ChevronDown className="w-4 h-4 mr-1.5" />Show Details</>}
           </Button>
         </div>
 
@@ -319,15 +326,15 @@ export default function RankPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">排名</TableHead>
-                {showDetails && <TableHead className="w-20">封面</TableHead>}
-                <TableHead>RJ号</TableHead>
-                {showDetails && <TableHead>标题</TableHead>}
-                <TableHead>社团</TableHead>
+                <TableHead className="w-16">Rank</TableHead>
+                {showDetails && <TableHead className="w-20">Cover</TableHead>}
+                <TableHead>RJ Code</TableHead>
+                {showDetails && <TableHead>Title</TableHead>}
+                <TableHead>Circle</TableHead>
                 {showDetails && <TableHead>CV</TableHead>}
-                {showDetails && <TableHead>发售日</TableHead>}
-                {showDetails && <TableHead>标签</TableHead>}
-                <TableHead className="w-32 sticky right-0 bg-card">操作</TableHead>
+                {showDetails && <TableHead>Release Date</TableHead>}
+                {showDetails && <TableHead>Tags</TableHead>}
+                <TableHead className="w-32 sticky right-0 bg-card">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -440,7 +447,7 @@ export default function RankPage() {
                             )
                           }
                         >
-                          {rjExists ? <><Minus className="w-3.5 h-3.5 mr-1" />移除 RJ</> : <><Plus className="w-3.5 h-3.5 mr-1" />添加 RJ</>}
+                          {rjExists ? <><Minus className="w-3.5 h-3.5 mr-1" />Remove RJ</> : <><Plus className="w-3.5 h-3.5 mr-1" />Add RJ</>}
                         </Button>
                         {item.circle && (
                           <Button
@@ -458,7 +465,7 @@ export default function RankPage() {
                               )
                             }
                           >
-                            {circleExists ? <><Minus className="w-3.5 h-3.5 mr-1" />移除社团</> : <><Plus className="w-3.5 h-3.5 mr-1" />添加社团</>}
+                            {circleExists ? <><Minus className="w-3.5 h-3.5 mr-1" />Remove Circle</> : <><Plus className="w-3.5 h-3.5 mr-1" />Add Circle</>}
                           </Button>
                         )}
                       </div>
@@ -472,7 +479,7 @@ export default function RankPage() {
                     colSpan={showDetails ? 9 : 4}
                     className="text-center text-muted-foreground py-10"
                   >
-                    暂无数据
+                    No data
                   </TableCell>
                 </TableRow>
               )}
@@ -491,7 +498,7 @@ export default function RankPage() {
               void load(page - 1, rankingType, pageSize, currentFilters);
             }}
           >
-            上一页
+            Previous
           </Button>
           <span>
             {page} / {pages}
@@ -505,7 +512,7 @@ export default function RankPage() {
               void load(page + 1, rankingType, pageSize, currentFilters);
             }}
           >
-            下一页
+            Next
           </Button>
         </div>
       </div>
