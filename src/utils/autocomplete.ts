@@ -274,8 +274,13 @@ const getFileSuggestions = (rawPrefix: string, basePath: string): { items: Autoc
 const extractAtPrefix = (text: string): string | null => {
   const lastDelim = findLastDelimiter(text);
   const tokenStart = lastDelim === -1 ? 0 : lastDelim + 1;
-  if (text[tokenStart] === "@") return text.slice(tokenStart);
-  return null;
+  const token = text.slice(tokenStart);
+  if (!token.startsWith("@")) return null;
+  const pathPrefix = token.slice(1);
+  if (pathPrefix.length === 0) return token;
+  if (/^(?:\.\.?\/|~\/|\/)/.test(pathPrefix)) return token;
+  if (!pathPrefix.includes("/")) return null;
+  return token;
 };
 
 /**
@@ -284,8 +289,6 @@ const extractAtPrefix = (text: string): string | null => {
 export class RJAutocompleteProvider implements AutocompleteProvider {
   private inner: CombinedAutocompleteProvider;
   private basePath: string;
-  /** 记录上次补全来源，用于 applyCompletion 分支判断 */
-  private lastCompletionSource: "at" | "inner" = "inner";
 
   constructor(
     commands: { name: string; description: string }[],
@@ -303,10 +306,15 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
   ): Promise<AutocompleteSuggestions | null> {
     const currentLine = lines[cursorLine] ?? "";
     const textBeforeCursor = currentLine.slice(0, cursorCol);
+    const trimmed = textBeforeCursor.trim();
+
+    if (trimmed.startsWith("/") && !trimmed.includes(" ")) {
+      return this.inner.getSuggestions(lines, cursorLine, cursorCol, options);
+    }
 
     const atPrefix = extractAtPrefix(textBeforeCursor);
     if (atPrefix !== null) {
-      const rawPrefix = atPrefix.slice(1); // 去掉开头的 @
+      const rawPrefix = atPrefix.slice(1);
       const { items, searchPrefix } = getFileSuggestions(rawPrefix, this.basePath);
       const filtered = searchPrefix
         ? fuzzyFilter(items, searchPrefix, (item) => item.label.replace(/\/$/, ""))
@@ -318,14 +326,10 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
         return a.label.localeCompare(b.label);
       });
       if (filtered.length === 0) return null;
-      this.lastCompletionSource = "at";
       return { items: filtered, prefix: atPrefix };
     }
 
-    // 委托给内置提供商处理斜杠命令和其他补全
-    const result = await this.inner.getSuggestions(lines, cursorLine, cursorCol, options);
-    if (result) this.lastCompletionSource = "inner";
-    return result;
+    return this.inner.getSuggestions(lines, cursorLine, cursorCol, options);
   }
 
   applyCompletion(
@@ -335,11 +339,10 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
     item: AutocompleteItem,
     prefix: string,
   ): { lines: string[]; cursorLine: number; cursorCol: number } {
-    if (this.lastCompletionSource === "inner") {
+    if (!extractAtPrefix(prefix)) {
       return this.inner.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
     }
 
-    // @ 文件补全：直接替换当前行的前缀部分
     const currentLine = lines[cursorLine] ?? "";
     const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
     const afterCursor = currentLine.slice(cursorCol);
@@ -357,10 +360,12 @@ export class RJAutocompleteProvider implements AutocompleteProvider {
   shouldTriggerFileCompletion(lines: string[], cursorLine: number, cursorCol: number): boolean {
     const currentLine = lines[cursorLine] ?? "";
     const textBeforeCursor = currentLine.slice(0, cursorCol);
-    // 斜杠命令不触发文件补全
-    if (textBeforeCursor.trim().startsWith("/") && !textBeforeCursor.trim().includes(" ")) {
+    const trimmed = textBeforeCursor.trim();
+
+    if (trimmed.startsWith("/") && !trimmed.includes(" ")) {
       return false;
     }
-    return true;
+
+    return extractAtPrefix(textBeforeCursor) !== null;
   }
 }

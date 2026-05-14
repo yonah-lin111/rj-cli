@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/**/*.test.ts",
     "build:web": "cd web && pnpm install && pnpm build"
   },
   "dependencies": {
