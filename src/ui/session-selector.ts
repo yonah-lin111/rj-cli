@@ -7,16 +7,12 @@ import {
 import type { SessionRecord } from "../core/session.ts";
 import { editorTheme, theme } from "./theme.ts";
 
-const setFilteredItems = (list: SelectList, items: SelectItem[]): void => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (list as any).filteredItems = items;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (list as any).selectedIndex = 0;
+const isAsciiTextInput = (keyData: string): boolean => {
+  return keyData.length > 0 && /^[\u0020-\u007e]+$/.test(keyData);
 };
 
-const getTrailingAsciiWordLength = (value: string): number => {
-  const match = /[A-Za-z]+$/.exec(value);
-  return match?.[0].length ?? 0;
+const isNonAsciiPrintable = (value: string | undefined): boolean => {
+  return Boolean(value && /[^\u0000-\u00ff]/u.test(value));
 };
 
 /** 会话选择器组件，参考 ModelSelector 实现 */
@@ -26,7 +22,6 @@ export class SessionSelector extends Container implements Focusable {
   private details = new Text();
   private items: (SelectItem & { session: SessionRecord })[];
   private lastNavTime = 0;
-  private composingAsciiLength = 0;
 
   focused = false;
 
@@ -90,34 +85,16 @@ export class SessionSelector extends Container implements Focusable {
       return;
     }
 
-    const previousValue = this.search.getValue();
-    const committedChar = decodeKittyPrintable(keyData);
-    if (committedChar && /[^\u0000-\u00ff]/u.test(committedChar) && this.composingAsciiLength > 0) {
-      this.search.setValue(previousValue.slice(0, -this.composingAsciiLength));
-      this.composingAsciiLength = 0;
+    const kittyPrintable = decodeKittyPrintable(keyData);
+    if (kittyPrintable !== undefined && !isNonAsciiPrintable(kittyPrintable)) {
+      return;
+    }
+    if (kittyPrintable === undefined && isAsciiTextInput(keyData)) {
+      return;
     }
 
     this.search.handleInput(keyData);
-    const nextValue = this.search.getValue();
-    if (nextValue === previousValue) return;
-
-    const trailingAsciiLength = getTrailingAsciiWordLength(nextValue);
-    const inputGrew = nextValue.length > previousValue.length;
-    if (committedChar && /[^\u0000-\u00ff]/u.test(committedChar)) {
-      this.composingAsciiLength = 0;
-    } else if (inputGrew && trailingAsciiLength > 0) {
-      this.composingAsciiLength = trailingAsciiLength;
-    } else if (trailingAsciiLength === 0) {
-      this.composingAsciiLength = 0;
-    } else {
-      this.composingAsciiLength = Math.min(this.composingAsciiLength, trailingAsciiLength);
-    }
-
-    const filter = nextValue.toLowerCase();
-    const filtered = filter
-      ? this.items.filter((i) => i.label!.toLowerCase().includes(filter))
-      : this.items;
-    setFilteredItems(this.list, filtered);
+    this.list.setFilter(this.search.getValue());
     this.updateDetails(this.list.getSelectedItem());
   }
 
@@ -159,6 +136,3 @@ const formatDate = (iso: string): string => {
     return iso;
   }
 };
-
-
-

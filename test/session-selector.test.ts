@@ -41,9 +41,24 @@ test("/session 过滤时忽略更长拼音串，仅保留最终中文句子", ()
   const selector = createSelector();
 
   selector.handleInput("n");
-  selector.handleInput("i");
   selector.handleInput("s");
   selector.handleInput("s");
+  selector.handleInput("\u001b[20320;1u");
+  selector.handleInput("\u001b[26159;1u");
+  selector.handleInput("\u001b[35841;1u");
+
+  assert.equal(getSearchValue(selector), "你是谁");
+});
+
+test("/session 过滤时忽略 kitty ASCII 拼音中间态，仅显示最终中文", () => {
+  const selector = createSelector();
+
+  selector.handleInput("\u001b[110;1u");
+  selector.handleInput("\u001b[115;1u");
+  selector.handleInput("\u001b[115;1u");
+
+  assert.equal(getSearchValue(selector), "");
+
   selector.handleInput("\u001b[20320;1u");
   selector.handleInput("\u001b[26159;1u");
   selector.handleInput("\u001b[35841;1u");
