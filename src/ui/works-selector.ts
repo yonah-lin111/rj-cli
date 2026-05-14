@@ -6,7 +6,7 @@ import {
 import { editorTheme, theme } from "./theme.ts";
 
 export type WorksOutputMode = "terminal" | "page";
-export type WorksQueryPreset = "latest-added" | "latest-undownloaded";
+export type WorksQueryPreset = "all" | "latest-added" | "latest-undownloaded";
 
 export interface WorksSelection {
   outputMode: WorksOutputMode;
@@ -26,6 +26,7 @@ const OUTPUT_ITEMS: SelectItem[] = [
 ];
 
 const PRESET_ITEMS: SelectItem[] = [
+  { value: "all", label: "No preset", description: "Do not apply any preset filter" },
   { value: "latest-undownloaded", label: "Latest undownloaded", description: "Show latest 5 undownloaded works" },
   { value: "latest-added", label: "Latest added", description: "Show latest 5 added works" },
 ];
@@ -108,7 +109,7 @@ export class WorksSelector extends Container implements Focusable {
 
   private selection(): WorksSelection {
     const outputMode = (this.outputList.getSelectedItem()?.value ?? "terminal") as WorksOutputMode;
-    const queryPreset = (this.presetList.getSelectedItem()?.value ?? "latest-undownloaded") as WorksQueryPreset;
+    const queryPreset = (this.presetList.getSelectedItem()?.value ?? "all") as WorksQueryPreset;
     const circleValue = this.circleList.getSelectedItem()?.value;
     return {
       outputMode,
@@ -136,7 +137,7 @@ export class WorksSelector extends Container implements Focusable {
     const selection = this.selection();
     const pageMode = this.isPageMode();
     const outputLabel = this.outputList.getSelectedItem()?.label ?? "View in terminal";
-    const presetLabel = this.presetList.getSelectedItem()?.label ?? "Latest undownloaded";
+    const presetLabel = this.presetList.getSelectedItem()?.label ?? "No preset";
     const circleLabel = selection.circleName ?? "None";
     if (pageMode && this.tabIndex !== 0) this.tabIndex = 0;
     this.titleText.setText(theme.bold("Works"));

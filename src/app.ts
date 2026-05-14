@@ -1203,7 +1203,11 @@ export class RJApp {
       filters.push(`circle=${JSON.stringify(selection.circleName)}`);
     }
 
-    const presetText = selection.queryPreset === "latest-undownloaded" ? "最新 5 条未下载作品" : "最新 5 条已添加作品";
+    const presetText = selection.queryPreset === "latest-undownloaded"
+      ? "最新 5 条未下载作品"
+      : selection.queryPreset === "latest-added"
+        ? "最新 5 条已添加作品"
+        : "全部作品";
     await this.handleChat(`请查询本地作品数据并只输出结果表格：
 1. 调用 rj_query，参数 ${filters.join("、")}
 2. 将返回 data 渲染为 Markdown 表格，列至少包含 RJ号、标题、社团、状态、创建时间
@@ -1215,7 +1219,8 @@ export class RJApp {
     const server = this.rankPageServer?.listening ? this.rankPageServer : await startRankPageServer();
     this.rankPageServer = server;
     const address = server.address() as AddressInfo;
-    const params = new URLSearchParams({ preset: selection.queryPreset, page_size: "30" });
+    const params = new URLSearchParams({ page_size: "30" });
+    if (selection.queryPreset !== "all") params.set("preset", selection.queryPreset);
     if (selection.circleName) params.set("circle", selection.circleName);
     const url = `http://127.0.0.1:${address.port}/works?${params.toString()}`;
     const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();

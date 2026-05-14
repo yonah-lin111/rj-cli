@@ -1,5 +1,5 @@
 export type RankingType = "24h" | "7d" | "30d" | "year";
-export type WorksQueryPreset = "latest-added" | "latest-undownloaded";
+export type WorksQueryPreset = "all" | "latest-added" | "latest-undownloaded";
 
 export interface RankItem {
   rank: number;
@@ -98,7 +98,7 @@ export interface WorkItem {
   tags: string[];
   release_date?: string;
   thumbnail?: string | null;
-  source?: string;
+  source?: string | null;
   status?: number;
   created_at?: string;
   download_links: DownloadLinksValue;

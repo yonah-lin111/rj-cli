@@ -204,25 +204,34 @@ const sendCircleLatestWorksData = async (url: URL, res: ServerResponse): Promise
   sendJson(res, JSON.parse(result.content));
 };
 
-const parseWorksPreset = (value: string | null): "latest-added" | "latest-undownloaded" => {
-  return value === "latest-added" ? "latest-added" : "latest-undownloaded";
+const parseWorksPreset = (value: string | null): "all" | "latest-added" | "latest-undownloaded" => {
+  if (value === "latest-added" || value === "latest-undownloaded") return value;
+  return "all";
 };
 
 const sendWorksPageData = (url: URL, res: ServerResponse): void => {
   const preset = parseWorksPreset(url.searchParams.get("preset"));
+  const statusParam = url.searchParams.get("status");
+  const status = statusParam == null || statusParam.trim() === ""
+    ? (preset === "latest-undownloaded" ? 0 : undefined)
+    : parsePositiveInt(statusParam, 0, 0, 2);
   const result = queryRjTool({
     page: parsePositiveInt(url.searchParams.get("page"), 1, 1, 1000),
     page_size: parsePositiveInt(url.searchParams.get("page_size"), 20, 1, 100),
     rj_code: url.searchParams.get("rj_code")?.trim() || undefined,
     title: url.searchParams.get("title")?.trim() || undefined,
     circle: url.searchParams.get("circle")?.trim() || undefined,
-    status: preset === "latest-undownloaded" ? 0 : undefined,
+    source: url.searchParams.get("source")?.trim() || undefined,
+    status,
   });
   if (result.isError) {
     sendJson(res, { error: result.content }, 500);
     return;
   }
-  sendJson(res, { preset, ...JSON.parse(result.content) });
+  sendJson(res, {
+    preset,
+    ...JSON.parse(result.content),
+  });
 };
 
 export const parseRankingType = (value: string | null): RankSelection["rankingType"] => {

@@ -32,7 +32,19 @@ import {
 } from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = ["5", "10", "20", "30", "50", "100"];
+const STATUS_OPTIONS = [
+  { value: "all", label: "全部状态" },
+  { value: "0", label: "未下载" },
+  { value: "1", label: "已下载" },
+  { value: "2", label: "已删除" },
+] as const;
+const SOURCE_OPTIONS = [
+  { value: "all", label: "全部来源" },
+  { value: "asmrone", label: "asmrone" },
+  { value: "mega", label: "mega" },
+] as const;
 const PRESET_OPTIONS: Array<{ value: WorksQueryPreset; label: string }> = [
+  { value: "all", label: "无" },
   { value: "latest-undownloaded", label: "最新未下载" },
   { value: "latest-added", label: "最新添加" },
 ];
@@ -48,17 +60,24 @@ function getInitialParams() {
   const p = new URLSearchParams(location.search);
   const preset = p.get("preset");
   return {
-    preset: preset === "latest-added" ? "latest-added" : "latest-undownloaded",
+    preset:
+      preset === "latest-added" || preset === "latest-undownloaded" || preset === "all"
+        ? preset
+        : "all",
     page_size: p.get("page_size") ?? "30",
     circle: p.get("circle") ?? "",
     rj_code: p.get("rj_code") ?? "",
     title: p.get("title") ?? "",
+    source: p.get("source") ?? "all",
+    status: p.get("status") ?? "all",
   } as {
     preset: WorksQueryPreset;
     page_size: string;
     circle: string;
     rj_code: string;
     title: string;
+    source: string;
+    status: string;
   };
 }
 
@@ -98,6 +117,8 @@ export default function WorksPage() {
   const [circle, setCircle] = useState(init.circle);
   const [rjCode, setRjCode] = useState(init.rj_code);
   const [title, setTitle] = useState(init.title);
+  const [source, setSource] = useState(init.source);
+  const [statusFilter, setStatusFilter] = useState(init.status);
 
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -124,8 +145,8 @@ export default function WorksPage() {
   }, [modal.type]);
 
   const currentFilters = useMemo(
-    () => ({ preset, circle, rj_code: rjCode, title }),
-    [preset, circle, rjCode, title],
+    () => ({ preset, circle, rj_code: rjCode, title, source, status: statusFilter }),
+    [preset, circle, rjCode, title, source, statusFilter],
   );
 
   const load = useCallback(
@@ -137,17 +158,21 @@ export default function WorksPage() {
         circle: string;
         rj_code: string;
         title: string;
+        source: string;
+        status: string;
       },
     ) => {
       setStatus({ type: "loading" });
       const q = new URLSearchParams({
-        preset: filters.preset,
         page: String(p),
         page_size: ps,
       });
+      if (filters.preset !== "all") q.set("preset", filters.preset);
       if (filters.circle.trim()) q.set("circle", filters.circle.trim());
       if (filters.rj_code.trim()) q.set("rj_code", filters.rj_code.trim());
       if (filters.title.trim()) q.set("title", filters.title.trim());
+      if (filters.source !== "all") q.set("source", filters.source);
+      if (filters.status !== "all") q.set("status", filters.status);
       history.replaceState(null, "", "/works?" + q.toString());
       try {
         const data = await fetchWorksList({
@@ -157,6 +182,8 @@ export default function WorksPage() {
           circle: filters.circle.trim() || undefined,
           rj_code: filters.rj_code.trim() || undefined,
           title: filters.title.trim() || undefined,
+          source: filters.source === "all" ? undefined : filters.source,
+          status: filters.status === "all" ? undefined : Number(filters.status),
         });
         setTotal(data.total);
         setItems(data.data);
@@ -191,17 +218,21 @@ export default function WorksPage() {
   };
 
   const handleReset = () => {
-    setPreset("latest-undownloaded");
+    setPreset("all");
     setPageSize("30");
     setCircle("");
     setRjCode("");
     setTitle("");
+    setSource("all");
+    setStatusFilter("all");
     setPage(1);
     void load(1, "30", {
-      preset: "latest-undownloaded",
+      preset: "all",
       circle: "",
       rj_code: "",
       title: "",
+      source: "all",
+      status: "all",
     });
   };
 
@@ -233,7 +264,7 @@ export default function WorksPage() {
     <div className="min-h-screen bg-background p-6">
       <h1 className="mb-5 text-2xl font-bold text-foreground">作品管理</h1>
       <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6 mb-4 items-end">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7 mb-4 items-end">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs text-muted-foreground">预设查询</label>
             <Select
@@ -292,6 +323,50 @@ export default function WorksPage() {
                 debouncedSearch({ title: value });
               }}
             />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">来源</label>
+            <Select
+              value={source}
+              onValueChange={(value) => {
+                setSource(value);
+                setPage(1);
+                void load(1, pageSize, { ...currentFilters, source: value });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">状态</label>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value);
+                setPage(1);
+                void load(1, pageSize, { ...currentFilters, status: value });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs text-muted-foreground">每页</label>

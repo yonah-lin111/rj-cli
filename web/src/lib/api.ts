@@ -104,23 +104,27 @@ export async function fetchCircleLatestWorks(circleName: string, limit = 10): Pr
 }
 
 export interface WorksListParams {
-  preset: WorksQueryPreset;
+  preset?: WorksQueryPreset;
   page: number;
   page_size: number;
   circle?: string;
   rj_code?: string;
   title?: string;
+  source?: string;
+  status?: number;
 }
 
 export async function fetchWorksList(params: WorksListParams): Promise<WorksListResponse> {
   const q = new URLSearchParams({
-    preset: params.preset,
     page: String(params.page),
     page_size: String(params.page_size),
   });
+  if (params.preset && params.preset !== "all") q.set("preset", params.preset);
   if (params.circle) q.set("circle", params.circle);
   if (params.rj_code) q.set("rj_code", params.rj_code);
   if (params.title) q.set("title", params.title);
+  if (params.source) q.set("source", params.source);
+  if (params.status !== undefined) q.set("status", String(params.status));
   const res = await fetch(`/api/works/list?${q}`);
   const data = (await res.json()) as WorksListResponse & { error?: string };
   if (!res.ok) throw new Error(data.error ?? "加载失败");
