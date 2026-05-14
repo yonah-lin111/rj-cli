@@ -1,5 +1,6 @@
 import {
   Container, Input, SelectList, Spacer, Text,
+  decodeKittyPrintable,
   getKeybindings,
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
@@ -13,6 +14,11 @@ const setFilteredItems = (list: SelectList, items: SelectItem[]): void => {
   (list as any).selectedIndex = 0;
 };
 
+const getTrailingAsciiWordLength = (value: string): number => {
+  const match = /[A-Za-z]+$/.exec(value);
+  return match?.[0].length ?? 0;
+};
+
 /** 会话选择器组件，参考 ModelSelector 实现 */
 export class SessionSelector extends Container implements Focusable {
   private search = new Input();
@@ -20,6 +26,7 @@ export class SessionSelector extends Container implements Focusable {
   private details = new Text();
   private items: (SelectItem & { session: SessionRecord })[];
   private lastNavTime = 0;
+  private composingAsciiLength = 0;
 
   focused = false;
 
@@ -84,9 +91,27 @@ export class SessionSelector extends Container implements Focusable {
     }
 
     const previousValue = this.search.getValue();
+    const committedChar = decodeKittyPrintable(keyData);
+    if (committedChar && /[^\u0000-\u00ff]/u.test(committedChar) && this.composingAsciiLength > 0) {
+      this.search.setValue(previousValue.slice(0, -this.composingAsciiLength));
+      this.composingAsciiLength = 0;
+    }
+
     this.search.handleInput(keyData);
     const nextValue = this.search.getValue();
     if (nextValue === previousValue) return;
+
+    const trailingAsciiLength = getTrailingAsciiWordLength(nextValue);
+    const inputGrew = nextValue.length > previousValue.length;
+    if (committedChar && /[^\u0000-\u00ff]/u.test(committedChar)) {
+      this.composingAsciiLength = 0;
+    } else if (inputGrew && trailingAsciiLength > 0) {
+      this.composingAsciiLength = trailingAsciiLength;
+    } else if (trailingAsciiLength === 0) {
+      this.composingAsciiLength = 0;
+    } else {
+      this.composingAsciiLength = Math.min(this.composingAsciiLength, trailingAsciiLength);
+    }
 
     const filter = nextValue.toLowerCase();
     const filtered = filter
@@ -134,3 +159,6 @@ const formatDate = (iso: string): string => {
     return iso;
   }
 };
+
+
+

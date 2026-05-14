@@ -152,9 +152,18 @@ export const helpText = (): string => {
   const keybindings = [
     "Keybindings:",
     "Ctrl+C".padEnd(16) + "Clear input, or exit if empty",
+    "Ctrl+E".padEnd(16) + "Open the Explore subagent",
     "Ctrl+Z".padEnd(16) + "Suspend process (background)",
-    "Esc Esc".padEnd(16) + "Cancel running AI request",
-    "↑ / ↓".padEnd(16) + "Navigate input history",
+    "Esc".padEnd(16) + "Cancel running AI request or close active picker",
+    "Enter".padEnd(16) + "Submit current input or confirm selection",
+    "Tab".padEnd(16) + "Switch sections in multi-column selectors",
+    "↑ / ↓".padEnd(16) + "Navigate input history or selector items",
+  ];
+  const notes = [
+    "Tips:",
+    "!command".padEnd(16) + "Run a bash command, e.g. !pwd",
+    "/workMatch".padEnd(16) + "Use [] to insert a folder path",
+    "/workMatchMulti".padEnd(16) + "Process subfolders under a root folder",
   ];
   return [
     `RJ commands:`,
@@ -164,7 +173,7 @@ export const helpText = (): string => {
     "",
     ...keybindings,
     "",
-    "Prefix with ! to run bash, e.g. !pwd",
+    ...notes,
   ].join("\n");
 };
 

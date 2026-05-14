@@ -130,3 +130,14 @@ export async function fetchWorksList(params: WorksListParams): Promise<WorksList
   if (!res.ok) throw new Error(data.error ?? "加载失败");
   return data;
 }
+
+export interface UpdateWorkStatusResponse {
+  ok: boolean;
+  rj_code: string;
+  status: number;
+  message?: string;
+}
+
+export async function updateWorkStatus(rj_code: string, status: number): Promise<UpdateWorkStatusResponse> {
+  return postJson<UpdateWorkStatusResponse>("/api/works/update-status", { rj_code, status });
+}

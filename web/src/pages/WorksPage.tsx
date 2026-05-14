@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchWorksList, postJson } from "@/lib/api";
+import { fetchWorksList, updateWorkStatus } from "@/lib/api";
 import type { DownloadLinksValue, WorkItem, WorksQueryPreset } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,11 @@ import {
 const PAGE_SIZE_OPTIONS = ["5", "10", "20", "30", "50", "100"];
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
+  { value: "0", label: "Not Downloaded" },
+  { value: "1", label: "Downloaded" },
+  { value: "2", label: "Deleted" },
+] as const;
+const STATUS_EDIT_OPTIONS = [
   { value: "0", label: "Not Downloaded" },
   { value: "1", label: "Downloaded" },
   { value: "2", label: "Deleted" },
@@ -238,11 +243,37 @@ export default function WorksPage() {
 
   const closeModal = () => setModal({ type: null, item: null });
 
-  const handleRemoveWork = async (item: WorkItem) => {
-      if (!confirm(`Delete work \"${item.rj_code}\"?`)) return;
+  const handleUpdateWorkStatus = async (item: WorkItem, nextStatusValue: string) => {
+    const nextStatus = Number(nextStatusValue);
+    if (Number.isNaN(nextStatus) || item.status === nextStatus) return;
+
     setActionLoading((prev) => ({ ...prev, [item.rj_code]: true }));
     try {
-      await postJson("/api/works/delete", { rj_code: item.rj_code });
+      const result = await updateWorkStatus(item.rj_code, nextStatus);
+      setStatus({ type: "ok", msg: result.message ?? `Updated ${item.rj_code}` });
+      await load(page, pageSize, currentFilters);
+    } catch (err) {
+      setStatus({
+        type: "error",
+        msg: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [item.rj_code]: false }));
+    }
+  };
+
+  const handleRemoveWork = async (item: WorkItem) => {
+    if (!confirm(`Delete work \"${item.rj_code}\"?`)) return;
+    setActionLoading((prev) => ({ ...prev, [item.rj_code]: true }));
+    try {
+      await fetch("/api/works/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rj_code: item.rj_code }),
+      }).then(async (res) => {
+        const data = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? "操作失败");
+      });
       setStatus({ type: "ok", msg: `Deleted ${item.rj_code}` });
       void load(page, pageSize, currentFilters);
       closeModal();
@@ -255,6 +286,7 @@ export default function WorksPage() {
       setActionLoading((prev) => ({ ...prev, [item.rj_code]: false }));
     }
   };
+
 
   const pages = Math.max(1, Math.ceil(total / Number(pageSize)));
   const modalItem = modal.item;
@@ -489,7 +521,22 @@ export default function WorksPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge>
+                    <Select
+                      value={String(item.status ?? 0)}
+                      disabled={actionLoading[item.rj_code]}
+                      onValueChange={(value) => void handleUpdateWorkStatus(item, value)}
+                    >
+                      <SelectTrigger className="w-[160px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_EDIT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   {showDetails && (
                     <TableCell className="text-sm text-muted-foreground">
