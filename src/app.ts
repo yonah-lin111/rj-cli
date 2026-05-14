@@ -366,7 +366,7 @@ export class RJApp {
     this.activeAIAbort = abortController;
     try {
       assistantIndex = this.messages.length;
-      assistant = this.addMessage("assistant", "", "assistant");
+      assistant = this.addMessage("assistant", "", "RJ");
       assistant.segments = [];
       this.activeQA = { user, assistant, sessionStartIndex, promptText: text };
       await streamChat({

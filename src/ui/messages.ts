@@ -91,7 +91,7 @@ const textStyles: Record<MessageKind, DefaultTextStyle> = {
  * 生成消息头部标签行。
  */
 const messageHeader = (message: Message): string => {
-  const label = message.label ?? message.kind;
+  const label = message.label ?? (message.kind === "assistant" ? "RJ" : message.kind);
   return `${colors[message.kind](label + ":")}`;
 };
 
