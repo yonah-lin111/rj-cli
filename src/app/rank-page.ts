@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getRankingTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, getCircleLatestWorksTool, addRjFromLatestWorkTool, queryRjTool } from "../tools/rj-server/index.ts";
+import { worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, updateCircleTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, checkRjExistsTool, checkCircleExistsTool, addWorkToCircleTool } from "../tools/rj-server/index.ts";
 import type { RankSelection } from "../ui/rank-selector.ts";
 
 const IS_DEV = process.env.RJ_WEB_DEV === "1";
@@ -81,9 +81,19 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
     sendWorksPageData(url, res);
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/works/delete") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => worksDeleteTool(body as unknown as Parameters<typeof worksDeleteTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/works/update-status") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => worksUpdateStatusTool(body as unknown as Parameters<typeof worksUpdateStatusTool>[0]));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/circle/latest-works/add") {
     const body = await readJsonBody(req);
-    await sendToolResponse(res, () => addRjFromLatestWorkTool(body as unknown as Parameters<typeof addRjFromLatestWorkTool>[0]));
+    await sendToolResponse(res, () => circleLatestWorkAddTool(body as unknown as Parameters<typeof circleLatestWorkAddTool>[0]));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/rj/check") {
@@ -93,12 +103,12 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (req.method === "POST" && url.pathname === "/api/rj/add") {
     const body = await readJsonBody(req);
-    await sendToolResponse(res, () => addRjFromRankingTool(body as unknown as Parameters<typeof addRjFromRankingTool>[0]));
+    await sendToolResponse(res, () => rankAddWorkTool(body as unknown as Parameters<typeof rankAddWorkTool>[0]));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/rj/remove") {
     const body = await readJsonBody(req);
-    await sendToolResponse(res, () => removeRjTool(body as unknown as Parameters<typeof removeRjTool>[0]));
+    await sendToolResponse(res, () => rankRemoveWorkTool(body as unknown as Parameters<typeof rankRemoveWorkTool>[0]));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/circle/check") {
@@ -108,7 +118,7 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (req.method === "POST" && url.pathname === "/api/circle/add") {
     const body = await readJsonBody(req);
-    await sendToolResponse(res, () => addCircleTool(body as unknown as Parameters<typeof addCircleTool>[0]));
+    await sendToolResponse(res, () => rankAddCircleTool(body as unknown as Parameters<typeof rankAddCircleTool>[0]));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/circle/update") {
@@ -123,12 +133,12 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (req.method === "POST" && url.pathname === "/api/circle/work/remove") {
     const body = await readJsonBody(req);
-    await sendToolResponse(res, () => removeWorkFromCircleTool(body as unknown as Parameters<typeof removeWorkFromCircleTool>[0]));
+    await sendToolResponse(res, () => circleWorkRemoveTool(body as unknown as Parameters<typeof circleWorkRemoveTool>[0]));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/circle/remove") {
     const body = await readJsonBody(req);
-    await sendToolResponse(res, () => removeCircleTool(body as unknown as Parameters<typeof removeCircleTool>[0]));
+    await sendToolResponse(res, () => circleDeleteTool(body as unknown as Parameters<typeof circleDeleteTool>[0]));
     return;
   }
   sendJson(res, { error: "Not found" }, 404);
@@ -138,7 +148,7 @@ const sendRankPageData = async (url: URL, res: ServerResponse): Promise<void> =>
   const rankingType = parseRankingType(url.searchParams.get("ranking_type"));
   const page = parsePositiveInt(url.searchParams.get("page"), 1, 1, 1000);
   const pageSize = parsePositiveInt(url.searchParams.get("page_size"), 20, 5, 100);
-  const result = await getRankingTool({
+  const result = await rankListTool({
     ranking_type: rankingType,
     page,
     page_size: pageSize,
@@ -155,7 +165,7 @@ const sendRankPageData = async (url: URL, res: ServerResponse): Promise<void> =>
 };
 
 const sendCirclePageData = (url: URL, res: ServerResponse): void => {
-  const result = queryCircleTool({
+  const result = circleListTool({
     page: parsePositiveInt(url.searchParams.get("page"), 1, 1, 1000),
     page_size: parsePositiveInt(url.searchParams.get("page_size"), 20, 1, 100),
     name: url.searchParams.get("name")?.trim() || undefined,
@@ -170,7 +180,7 @@ const sendCirclePageData = (url: URL, res: ServerResponse): void => {
 };
 
 const sendCircleDetailData = (url: URL, res: ServerResponse): void => {
-  const result = getCircleDetailTool({ name: url.searchParams.get("name")?.trim() || "" });
+  const result = circleGetTool({ name: url.searchParams.get("name")?.trim() || "" });
   if (result.isError) {
     sendJson(res, { error: result.content }, 500);
     return;
@@ -179,7 +189,7 @@ const sendCircleDetailData = (url: URL, res: ServerResponse): void => {
 };
 
 const sendCircleWorksData = (url: URL, res: ServerResponse): void => {
-  const result = queryCircleWorksTool({
+  const result = circleWorksListTool({
     circle_name: url.searchParams.get("circle_name")?.trim() || "",
     page: parsePositiveInt(url.searchParams.get("page"), 1, 1, 1000),
     page_size: parsePositiveInt(url.searchParams.get("page_size"), 20, 1, 100),
@@ -196,7 +206,7 @@ const sendCircleWorksData = (url: URL, res: ServerResponse): void => {
 const sendCircleLatestWorksData = async (url: URL, res: ServerResponse): Promise<void> => {
   const circleName = url.searchParams.get("circle_name")?.trim() || "";
   const limit = parsePositiveInt(url.searchParams.get("limit"), 10, 1, 20);
-  const result = await getCircleLatestWorksTool({ circle_name: circleName, limit });
+  const result = await circleLatestWorksListTool({ circle_name: circleName, limit });
   if (result.isError) {
     sendJson(res, { error: result.content }, 500);
     return;
@@ -215,7 +225,8 @@ const sendWorksPageData = (url: URL, res: ServerResponse): void => {
   const status = statusParam == null || statusParam.trim() === ""
     ? (preset === "latest-undownloaded" ? 0 : undefined)
     : parsePositiveInt(statusParam, 0, 0, 2);
-  const result = queryRjTool({
+  const result = worksListTool({
+    preset,
     page: parsePositiveInt(url.searchParams.get("page"), 1, 1, 1000),
     page_size: parsePositiveInt(url.searchParams.get("page_size"), 20, 1, 100),
     rj_code: url.searchParams.get("rj_code")?.trim() || undefined,

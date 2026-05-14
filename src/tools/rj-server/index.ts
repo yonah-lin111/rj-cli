@@ -1,6 +1,7 @@
 import { openDb, parseTags, serializeTags, normalizeRjCode } from "./db.ts";
 import { cacheGet, cacheSet, rankingCacheKey } from "./cache.ts";
 import { scrapeRanking, scrapeWorkDetail, scrapeCircleLatestWorks, type RankingType, type RankingItem } from "./scraper.ts";
+import { parsePositiveInt, parseRankingType } from "../../app/rank-page.ts";
 
 export interface RjServerToolResult {
   content: string;
@@ -208,6 +209,28 @@ export const removeRjTool = (args: RemoveRjArgs): RjServerToolResult => {
     return { content: JSON.stringify({ rj_code: rjCode, removed: result.changes > 0 }, null, 2), resultLabel: `RJ removed ${rjCode}`, isError: false };
   } catch (err) {
     return { content: `删除 RJ 失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const updateRjStatusTool = (args: WorksUpdateStatusArgs): RjServerToolResult => {
+  try {
+    const rjCode = normalizeRjCode(args.rj_code);
+    const status = parsePositiveInt(String(args.status), 0, 0, 2);
+    const db = openDb(false);
+    const exists = db.prepare("SELECT 1 FROM rj WHERE rj_code = ? LIMIT 1").get(rjCode);
+    if (!exists) {
+      db.close();
+      return { content: `未找到 RJ: ${rjCode}`, resultLabel: "not found", isError: true };
+    }
+    const result = db.prepare("UPDATE rj SET status = ? WHERE rj_code = ?").run(status, rjCode);
+    db.close();
+    return {
+      content: JSON.stringify({ rj_code: rjCode, status, updated: result.changes > 0 }, null, 2),
+      resultLabel: `RJ status updated ${rjCode}`,
+      isError: false,
+    };
+  } catch (err) {
+    return { content: `更新 RJ 状态失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
   }
 };
 
@@ -539,6 +562,107 @@ export interface RjQueryArgs {
   created_at_start?: string;
   created_at_end?: string;
 }
+
+export interface WorksListArgs {
+  preset?: "all" | "latest-added" | "latest-undownloaded";
+  page?: number;
+  page_size?: number;
+  circle?: string;
+  rj_code?: string;
+  title?: string;
+  source?: string;
+  status?: number;
+}
+
+export interface WorksDeleteArgs {
+  rj_code: string;
+}
+
+export interface WorksUpdateStatusArgs {
+  rj_code: string;
+  status: number;
+}
+
+export interface RankListArgs {
+  ranking_type?: string | null;
+  page?: number;
+  page_size?: number;
+  rj_code?: string;
+  title?: string;
+  circle?: string;
+  cv?: string;
+}
+
+export interface RankWorkArgs {
+  ranking_type?: string | null;
+  rj_code: string;
+  source?: string;
+}
+
+export interface RankCircleArgs {
+  name: string;
+  circle_url?: string;
+  nickname?: string;
+  remark?: string;
+}
+
+export interface CircleLatestWorkAddArgs extends AddRjFromLatestWorkArgs {}
+
+export const worksListTool = (args: WorksListArgs): RjServerToolResult => {
+  const preset = args.preset === "latest-added" || args.preset === "latest-undownloaded" ? args.preset : "all";
+  const status = args.status === undefined
+    ? (preset === "latest-undownloaded" ? 0 : undefined)
+    : parsePositiveInt(String(args.status), 0, 0, 2);
+  return queryRjTool({
+    page: args.page,
+    page_size: args.page_size,
+    rj_code: args.rj_code,
+    title: args.title,
+    circle: args.circle,
+    source: args.source,
+    status,
+  });
+};
+
+export const worksDeleteTool = (args: WorksDeleteArgs): RjServerToolResult => removeRjTool(args);
+
+export const worksUpdateStatusTool = (args: WorksUpdateStatusArgs): RjServerToolResult => updateRjStatusTool(args);
+
+export const circleListTool = (args: CircleQueryArgs): RjServerToolResult => queryCircleTool(args);
+
+export const circleGetTool = (args: CircleDetailArgs): RjServerToolResult => getCircleDetailTool(args);
+
+export const circleDeleteTool = (args: RemoveCircleArgs): RjServerToolResult => removeCircleTool(args);
+
+export const circleWorksListTool = (args: CircleWorksQueryArgs): RjServerToolResult => queryCircleWorksTool(args);
+
+export const circleWorkRemoveTool = (args: CircleWorkArgs): RjServerToolResult => removeWorkFromCircleTool(args);
+
+export const circleLatestWorksListTool = async (args: CircleLatestWorksArgs): Promise<RjServerToolResult> => getCircleLatestWorksTool(args);
+
+export const circleLatestWorkAddTool = async (args: CircleLatestWorkAddArgs): Promise<RjServerToolResult> => addRjFromLatestWorkTool(args);
+
+export const rankListTool = async (args: RankListArgs): Promise<RjServerToolResult> => getRankingTool({
+  ranking_type: parseRankingType(args.ranking_type ?? null),
+  page: args.page,
+  page_size: args.page_size,
+  rj_code: args.rj_code,
+  title: args.title,
+  circle: args.circle,
+  cv: args.cv,
+});
+
+export const rankAddWorkTool = async (args: RankWorkArgs): Promise<RjServerToolResult> => addRjFromRankingTool({
+  ranking_type: parseRankingType(args.ranking_type ?? null),
+  rj_code: args.rj_code,
+  source: args.source,
+});
+
+export const rankRemoveWorkTool = (args: RemoveRjArgs): RjServerToolResult => removeRjTool(args);
+
+export const rankAddCircleTool = (args: RankCircleArgs): RjServerToolResult => addCircleTool(args);
+
+export const rankRemoveCircleTool = (args: RemoveCircleArgs): RjServerToolResult => removeCircleTool(args);
 
 export const queryRjTool = (args: RjQueryArgs): RjServerToolResult => {
   const { page = 1, page_size = 20, rj_code, title, circle, cv, source, status,

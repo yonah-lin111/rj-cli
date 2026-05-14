@@ -242,7 +242,7 @@ export default function WorksPage() {
       if (!confirm(`Delete work \"${item.rj_code}\"?`)) return;
     setActionLoading((prev) => ({ ...prev, [item.rj_code]: true }));
     try {
-      await postJson("/api/rj/remove", { rj_code: item.rj_code });
+      await postJson("/api/works/delete", { rj_code: item.rj_code });
       setStatus({ type: "ok", msg: `Deleted ${item.rj_code}` });
       void load(page, pageSize, currentFilters);
       closeModal();

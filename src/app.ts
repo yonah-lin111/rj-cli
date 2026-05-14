@@ -10,8 +10,8 @@ import {
 import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
-import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool } from "./tools/rj-server/index.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
+import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool } from "./tools/rj-server/index.ts";
 import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
@@ -410,7 +410,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -598,6 +598,96 @@ export class RJApp {
                 entry.resultText = resultText;
               } else if (call.name === "circle_check_exists") {
                 const result = checkCircleExistsTool(args as unknown as Parameters<typeof checkCircleExistsTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "works_list") {
+                const result = worksListTool(args as Parameters<typeof worksListTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "works_delete") {
+                const result = worksDeleteTool(args as unknown as Parameters<typeof worksDeleteTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "works_update_status") {
+                const result = worksUpdateStatusTool(args as unknown as Parameters<typeof worksUpdateStatusTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_list") {
+                const result = circleListTool(args as Parameters<typeof circleListTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_get") {
+                const result = circleGetTool(args as unknown as Parameters<typeof circleGetTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_delete") {
+                const result = circleDeleteTool(args as unknown as Parameters<typeof circleDeleteTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_works_list") {
+                const result = circleWorksListTool(args as unknown as Parameters<typeof circleWorksListTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_work_remove") {
+                const result = circleWorkRemoveTool(args as unknown as Parameters<typeof circleWorkRemoveTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_latest_works_list") {
+                const result = await circleLatestWorksListTool(args as unknown as Parameters<typeof circleLatestWorksListTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "circle_latest_work_add") {
+                const result = await circleLatestWorkAddTool(args as unknown as Parameters<typeof circleLatestWorkAddTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rank_list") {
+                const result = await rankListTool(args as Parameters<typeof rankListTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rank_add_work") {
+                const result = await rankAddWorkTool(args as unknown as Parameters<typeof rankAddWorkTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rank_remove_work") {
+                const result = rankRemoveWorkTool(args as unknown as Parameters<typeof rankRemoveWorkTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rank_add_circle") {
+                const result = rankAddCircleTool(args as unknown as Parameters<typeof rankAddCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "rank_remove_circle") {
+                const result = rankRemoveCircleTool(args as unknown as Parameters<typeof rankRemoveCircleTool>[0]);
                 resultText = result.content;
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;

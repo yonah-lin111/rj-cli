@@ -6,6 +6,13 @@ import {
 import type { SessionRecord } from "../core/session.ts";
 import { editorTheme, theme } from "./theme.ts";
 
+const setFilteredItems = (list: SelectList, items: SelectItem[]): void => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (list as any).filteredItems = items;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (list as any).selectedIndex = 0;
+};
+
 /** 会话选择器组件，参考 ModelSelector 实现 */
 export class SessionSelector extends Container implements Focusable {
   private search = new Input();
@@ -75,16 +82,17 @@ export class SessionSelector extends Container implements Focusable {
       this.list.handleInput(keyData);
       return;
     }
+
+    const previousValue = this.search.getValue();
     this.search.handleInput(keyData);
-    const filter = this.search.getValue().toLowerCase();
+    const nextValue = this.search.getValue();
+    if (nextValue === previousValue) return;
+
+    const filter = nextValue.toLowerCase();
     const filtered = filter
       ? this.items.filter((i) => i.label!.toLowerCase().includes(filter))
       : this.items;
-    // SelectList.setFilter 按 value 过滤，这里需要按 label(title) 过滤，直接设置 filteredItems
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (this.list as any).filteredItems = filtered;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (this.list as any).selectedIndex = 0;
+    setFilteredItems(this.list, filtered);
     this.updateDetails(this.list.getSelectedItem());
   }
 

@@ -669,6 +669,281 @@ export const circleCheckExistsSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+export const worksListSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "works_list",
+    description: "查询 /works 页面作品列表，支持 preset、筛选和分页。",
+    parameters: {
+      type: "object",
+      properties: {
+        preset: { type: "string", enum: ["all", "latest-added", "latest-undownloaded"], description: "列表预设。" },
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        circle: { type: "string", description: "按社团名模糊查询。" },
+        rj_code: { type: "string", description: "按 RJ 号筛选。" },
+        title: { type: "string", description: "按标题模糊查询。" },
+        source: { type: "string", description: "按来源筛选。" },
+        status: { type: "number", description: "按状态筛选；preset=latest-undownloaded 时默认 0。" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const worksDeleteSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "works_delete",
+    description: "删除 /works 页面中的指定作品记录。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+      },
+      required: ["rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const worksUpdateStatusSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "works_update_status",
+    description: "更新 /works 页面指定作品的状态。0=未下载，1=已下载，2=已删除。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+        status: { type: "number", enum: [0, 1, 2], description: "作品状态：0 未下载，1 已下载，2 已删除。" },
+      },
+      required: ["rj_code", "status"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleListSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_list",
+    description: "查询 /circle 页面社团列表。",
+    parameters: {
+      type: "object",
+      properties: {
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        name: { type: "string", description: "按社团名模糊查询。" },
+        nickname: { type: "string", description: "按昵称模糊查询。" },
+        remark: { type: "string", description: "按备注模糊查询。" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleGetSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_get",
+    description: "获取 /circle 页面指定社团详情。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleDeleteSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_delete",
+    description: "删除 /circle 页面指定社团。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleWorksListSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_works_list",
+    description: "查询 /circle 页面指定社团的作品列表。",
+    parameters: {
+      type: "object",
+      properties: {
+        circle_name: { type: "string", description: "社团名。" },
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        rj_code: { type: "string", description: "按 RJ 号筛选。" },
+        title: { type: "string", description: "按标题模糊查询。" },
+      },
+      required: ["circle_name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleWorkRemoveSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_work_remove",
+    description: "从 /circle 页面指定社团中移除某个作品关联。",
+    parameters: {
+      type: "object",
+      properties: {
+        circle_name: { type: "string", description: "社团名。" },
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+      },
+      required: ["circle_name", "rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleLatestWorksListSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_latest_works_list",
+    description: "查询 /circle 页面社团最新发布作品列表。",
+    parameters: {
+      type: "object",
+      properties: {
+        circle_name: { type: "string", description: "社团名。" },
+        limit: { type: "number", description: "返回数量，默认 10，最多 20。" },
+      },
+      required: ["circle_name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const circleLatestWorkAddSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_latest_work_add",
+    description: "将 /circle 页面 latest works 中的作品添加到本地数据库。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号。" },
+        title: { type: "string", description: "作品标题。" },
+        title_url: { type: ["string", "null"], description: "作品详情链接。" },
+        thumbnail: { type: ["string", "null"], description: "缩略图链接。" },
+        release_date: { type: ["string", "null"], description: "发售日期。" },
+        is_all_ages: { type: "boolean", description: "是否全年龄。" },
+        circle_name: { type: "string", description: "所属社团名。" },
+      },
+      required: ["rj_code", "title", "title_url", "thumbnail", "release_date", "is_all_ages", "circle_name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rankListSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rank_list",
+    description: "查询 /rank 页面排行榜列表。",
+    parameters: {
+      type: "object",
+      properties: {
+        ranking_type: { type: "string", enum: ["24h", "7d", "30d", "year"], description: "排行榜时间段。" },
+        page: { type: "number", description: "页码，默认 1。" },
+        page_size: { type: "number", description: "每页数量，默认 20，最大 100。" },
+        rj_code: { type: "string", description: "按 RJ 号筛选。" },
+        title: { type: "string", description: "按标题模糊查询。" },
+        circle: { type: "string", description: "按社团名模糊查询。" },
+        cv: { type: "string", description: "按 CV 声优模糊查询。" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rankAddWorkSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rank_add_work",
+    description: "将 /rank 页面中的作品加入本地数据库。",
+    parameters: {
+      type: "object",
+      properties: {
+        ranking_type: { type: "string", enum: ["24h", "7d", "30d", "year"], description: "排行榜时间段。" },
+        rj_code: { type: "string", description: "RJ 号。" },
+        source: { type: "string", description: "可选来源。" },
+      },
+      required: ["ranking_type", "rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rankRemoveWorkSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rank_remove_work",
+    description: "删除 /rank 页面中的指定作品记录。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号。" },
+      },
+      required: ["rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rankAddCircleSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rank_add_circle",
+    description: "将 /rank 页面中的社团加入本地社团库。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名。" },
+        circle_url: { type: "string", description: "社团链接。" },
+        nickname: { type: "string", description: "社团昵称。" },
+        remark: { type: "string", description: "备注。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rankRemoveCircleSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rank_remove_circle",
+    description: "删除 /rank 页面中的指定社团记录。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "社团名。" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** ask tool 的 OpenAI schema */
 export const askToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",
