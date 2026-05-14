@@ -14,6 +14,11 @@ import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, wr
 import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool } from "./tools/rj-server/index.ts";
 import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
+  executeUploadMegaFile,
+  planUploadMegaFile,
+  type UploadMegaFilePlan,
+} from "./tools/local/upload-mega-file.ts";
+import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
   saveDefaultModel, savePromptHistory,
 } from "./core/config.ts";
@@ -1038,6 +1043,20 @@ export class RJApp {
       return true;
     }
 
+    if (action.type === "upload-mega-file") {
+      this.state.commandCount++;
+      this.addMessage("command", action.displayText, "command");
+      void this.handleUploadMegaFile(action.sourcePath);
+      return true;
+    }
+
+    if (action.type === "confirm-upload-mega-file") {
+      this.state.commandCount++;
+      this.addMessage("command", action.displayText, "command");
+      void this.handleLocalUploadMegaFileConfirm(action.questions, action.uploadPlan, action.cancelMessage);
+      return true;
+    }
+
     if (action.type === "chat") {
       void this.handleChat(action.text);
       return true;
@@ -1046,6 +1065,44 @@ export class RJApp {
     for (const message of action.messages) this.showPrompt(message);
     this.requestRender();
     return true;
+  }
+
+  private async handleUploadMegaFile(sourcePath: string): Promise<void> {
+    try {
+      const plan = planUploadMegaFile(sourcePath);
+      const result = executeUploadMegaFile(plan);
+      this.addMessage("system", `Copied file to ${result.targetPath}`, "system");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.addMessage("error", message, "error");
+    }
+    this.requestRender();
+  }
+
+  private async handleLocalUploadMegaFileConfirm(
+    questions: AskQuestion[],
+    uploadPlan: Pick<UploadMegaFilePlan, "sourcePath" | "targetPath">,
+    cancelMessage: string,
+  ): Promise<void> {
+    try {
+      const answers = await new Promise<string[][]>((resolve, reject) => {
+        const id = createAskId();
+        registerAskPending(id, resolve, reject);
+        this.showAskPrompt(id, questions);
+      });
+      const confirmed = answers[0]?.[0] === "Replace file";
+      if (!confirmed) {
+        this.addMessage("system", cancelMessage, "system");
+        this.requestRender();
+        return;
+      }
+
+      const result = executeUploadMegaFile(uploadPlan);
+      this.addMessage("system", `Copied file to ${result.targetPath}`, "system");
+    } catch {
+      this.addMessage("system", cancelMessage, "system");
+    }
+    this.requestRender();
   }
 
   private async handleBash(text: string): Promise<void> {
