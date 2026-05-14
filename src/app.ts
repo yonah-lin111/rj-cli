@@ -24,6 +24,7 @@ import { headerText, subagentHeaderText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { RankSelector, type RankSelection } from "./ui/rank-selector.ts";
 import { CircleSelector, type CircleSelection, type CircleSelectorItem } from "./ui/circle-selector.ts";
+import { WorksSelector, type WorksSelection, type WorksSelectorItem } from "./ui/works-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
 import { SubagentSelector } from "./ui/subagent-selector.ts";
 import { AskPrompt } from "./ui/ask-prompt.ts";
@@ -62,6 +63,7 @@ export class RJApp {
   private modelSelector?: ModelSelector;
   private rankSelector?: RankSelector;
   private circleSelector?: CircleSelector;
+  private worksSelector?: WorksSelector;
   private rankPageServer?: Server;
   private viteProcess?: ChildProcess;
   private openUrlCommand?: OpenUrlCommand;
@@ -207,6 +209,12 @@ export class RJApp {
 
       if (this.circleSelector) {
         this.circleSelector.handleInput(data);
+        this.requestRender();
+        return { consume: true };
+      }
+
+      if (this.worksSelector) {
+        this.worksSelector.handleInput(data);
         this.requestRender();
         return { consume: true };
       }
@@ -870,6 +878,12 @@ export class RJApp {
       return true;
     }
 
+    if (action.type === "show-works-selector") {
+      this.showWorksSelector();
+      this.requestRender();
+      return true;
+    }
+
     if (action.type === "show-model-selector") {
       this.showModelSelector(action.search);
       this.requestRender();
@@ -1144,6 +1158,78 @@ export class RJApp {
 5. bash 完成后简短回复打开结果`);
   }
 
+  private showWorksSelector(): void {
+    let circles: WorksSelectorItem[] = [];
+    const result = queryCircleTool({ page: 1, page_size: 500 });
+    if (result.isError) {
+      this.showPrompt(result.content);
+    } else {
+      const data = JSON.parse(result.content) as { data?: WorksSelectorItem[] };
+      circles = data.data ?? [];
+    }
+
+    const selector = new WorksSelector(
+      (selection) => {
+        this.closeWorksSelector();
+        void this.handleWorksSelection(selection);
+      },
+      () => {
+        this.closeWorksSelector();
+        this.requestRender();
+      },
+      circles,
+    );
+    this.worksSelector = selector;
+    this.refreshChat();
+    this.tui.setFocus(selector);
+  }
+
+  private closeWorksSelector(): void {
+    this.worksSelector = undefined;
+    this.tui.setFocus(this.editor);
+  }
+
+  private async handleWorksSelection(selection: WorksSelection): Promise<void> {
+    if (selection.outputMode === "page") {
+      await this.openWorksPage(selection);
+      return;
+    }
+
+    const filters = ["page=1", "page_size=5"];
+    if (selection.queryPreset === "latest-undownloaded") {
+      filters.push("status=0");
+    }
+    if (selection.circleName) {
+      filters.push(`circle=${JSON.stringify(selection.circleName)}`);
+    }
+
+    const presetText = selection.queryPreset === "latest-undownloaded" ? "最新 5 条未下载作品" : "最新 5 条已添加作品";
+    await this.handleChat(`请查询本地作品数据并只输出结果表格：
+1. 调用 rj_query，参数 ${filters.join("、")}
+2. 将返回 data 渲染为 Markdown 表格，列至少包含 RJ号、标题、社团、状态、创建时间
+3. 如果标题存在且带有 title_url，则渲染为 Markdown 链接
+4. 不要输出解释、总结或额外文字，本次查询目标是：${presetText}${selection.circleName ? `（社团：${selection.circleName}）` : ""}`);
+  }
+
+  private async openWorksPage(selection: WorksSelection): Promise<void> {
+    const server = this.rankPageServer?.listening ? this.rankPageServer : await startRankPageServer();
+    this.rankPageServer = server;
+    const address = server.address() as AddressInfo;
+    const params = new URLSearchParams({ preset: selection.queryPreset, page_size: "30" });
+    if (selection.circleName) params.set("circle", selection.circleName);
+    const url = `http://127.0.0.1:${address.port}/works?${params.toString()}`;
+    const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
+    this.openUrlCommand = opener;
+    await this.handleChat(`请使用 bash 工具打开本地作品管理页面，并在命令执行后简短说明页面已打开，支持分页、预设切换、社团/RJ号/标题筛选，以及查看详情和下载链接。
+
+要求：
+1. 当前系统打开命令是 ${opener.command}
+2. 页面地址是 ${url}
+3. 只调用一次 bash 工具打开页面
+4. 命令中必须安全引用 URL，不要拼接未转义的参数
+5. bash 完成后简短回复打开结果`);
+  }
+
   private showSessionSelector(): void {
     const sessions = listSessions().filter((s) => s.id !== this.currentSessionId);
     if (sessions.length === 0) {
@@ -1336,6 +1422,8 @@ export class RJApp {
       this.chat.addChild(this.rankSelector);
     } else if (this.circleSelector) {
       this.chat.addChild(this.circleSelector);
+    } else if (this.worksSelector) {
+      this.chat.addChild(this.worksSelector);
     } else if (this.sessionSelector) {
       this.chat.addChild(this.sessionSelector);
     } else if (this.subagentSelector) {

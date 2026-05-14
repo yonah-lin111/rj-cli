@@ -22,6 +22,7 @@ export type CommandAction =
   | { type: "show-model-selector"; search: string }
   | { type: "show-rank-selector" }
   | { type: "show-circle-selector" }
+  | { type: "show-works-selector" }
   | { type: "show-session-selector" }
   | { type: "clear"; messages?: string[] }
   | { type: "undo" }
@@ -65,6 +66,12 @@ const commandList: SlashCommand[] = [
     usage: "/circle",
     description: "Open the circle list selector.",
     handler: () => ({ type: "show-circle-selector" }),
+  },
+  {
+    name: "/works",
+    usage: "/works",
+    description: "Open the local works selector.",
+    handler: () => ({ type: "show-works-selector" }),
   },
   {
     name: "/clear",

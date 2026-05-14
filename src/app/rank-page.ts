@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getRankingTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, getCircleLatestWorksTool, addRjFromLatestWorkTool } from "../tools/rj-server/index.ts";
+import { getRankingTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, getCircleLatestWorksTool, addRjFromLatestWorkTool, queryRjTool } from "../tools/rj-server/index.ts";
 import type { RankSelection } from "../ui/rank-selector.ts";
 
 const IS_DEV = process.env.RJ_WEB_DEV === "1";
@@ -49,6 +49,10 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
     await sendCirclePageHtml(res);
     return;
   }
+  if (url.pathname === "/works") {
+    await sendWorksPageHtml(res);
+    return;
+  }
   if (!IS_DEV && url.pathname.startsWith("/assets/")) {
     await sendStaticAsset(url.pathname, res);
     return;
@@ -71,6 +75,10 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (url.pathname === "/api/circle/latest-works") {
     await sendCircleLatestWorksData(url, res);
+    return;
+  }
+  if (url.pathname === "/api/works/list") {
+    sendWorksPageData(url, res);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/circle/latest-works/add") {
@@ -196,6 +204,27 @@ const sendCircleLatestWorksData = async (url: URL, res: ServerResponse): Promise
   sendJson(res, JSON.parse(result.content));
 };
 
+const parseWorksPreset = (value: string | null): "latest-added" | "latest-undownloaded" => {
+  return value === "latest-added" ? "latest-added" : "latest-undownloaded";
+};
+
+const sendWorksPageData = (url: URL, res: ServerResponse): void => {
+  const preset = parseWorksPreset(url.searchParams.get("preset"));
+  const result = queryRjTool({
+    page: parsePositiveInt(url.searchParams.get("page"), 1, 1, 1000),
+    page_size: parsePositiveInt(url.searchParams.get("page_size"), 20, 1, 100),
+    rj_code: url.searchParams.get("rj_code")?.trim() || undefined,
+    title: url.searchParams.get("title")?.trim() || undefined,
+    circle: url.searchParams.get("circle")?.trim() || undefined,
+    status: preset === "latest-undownloaded" ? 0 : undefined,
+  });
+  if (result.isError) {
+    sendJson(res, { error: result.content }, 500);
+    return;
+  }
+  sendJson(res, { preset, ...JSON.parse(result.content) });
+};
+
 export const parseRankingType = (value: string | null): RankSelection["rankingType"] => {
   if (value === "7d" || value === "30d" || value === "year") return value;
   return "24h";
@@ -263,6 +292,22 @@ const sendCirclePageHtml = async (res: ServerResponse): Promise<void> => {
   }
   try {
     const html = await readFile(join(DIST_DIR, "circle.html"), "utf-8");
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(html);
+  } catch {
+    res.writeHead(503, { "content-type": "text/plain" });
+    res.end("Web assets not built. Run: pnpm build:web");
+  }
+};
+
+const sendWorksPageHtml = async (res: ServerResponse): Promise<void> => {
+  if (IS_DEV) {
+    res.writeHead(302, { location: `http://127.0.0.1:${VITE_PORT}/works.html` });
+    res.end();
+    return;
+  }
+  try {
+    const html = await readFile(join(DIST_DIR, "works.html"), "utf-8");
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     res.end(html);
   } catch {

@@ -122,6 +122,24 @@ const optionalText = (value: string | null | undefined): string | null => {
   return text ? text : null;
 };
 
+const parseDownloadLinks = (value: unknown): unknown => {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
+const normalizeRjRow = (row: Record<string, unknown>): Record<string, unknown> => ({
+  ...row,
+  tags: parseTags(row.tags),
+  download_links: parseDownloadLinks(row.download_links),
+});
+
 const getCachedRankingItems = async (rankingType: RankingType): Promise<RankingItem[]> => {
   const cacheKey = rankingCacheKey(rankingType);
   let items = cacheGet(cacheKey) as RankingItem[] | null;
@@ -353,7 +371,7 @@ export const queryCircleWorksTool = (args: CircleWorksQueryArgs): RjServerToolRe
     const rows = db.prepare(`SELECT * FROM rj ${where} ORDER BY id DESC LIMIT :limit OFFSET :offset`)
       .all({ ...params, limit: pageSize, offset }) as Record<string, unknown>[];
     db.close();
-    const data = rows.map(r => ({ ...r, tags: parseTags(r.tags) }));
+    const data = rows.map(normalizeRjRow);
     return {
       content: JSON.stringify({ circle_name: circleName, total, page: currentPage, page_size: pageSize, data }, null, 2),
       resultLabel: `社团作品查询 (${total} 条)`,
@@ -548,7 +566,7 @@ export const queryRjTool = (args: RjQueryArgs): RjServerToolResult => {
       .all({ ...params, limit: page_size, offset }) as Record<string, unknown>[];
     db.close();
 
-    const data = rows.map(r => ({ ...r, tags: parseTags(r.tags) }));
+    const data = rows.map(normalizeRjRow);
     return {
       content: JSON.stringify({ total, page, page_size, data }, null, 2),
       resultLabel: `RJ 查询 (${total} 条)`,
@@ -574,7 +592,7 @@ export const getRjDetailTool = (args: RjDetailArgs): RjServerToolResult => {
       return { content: `未找到 RJ: ${args.rj_code}`, resultLabel: "not found", isError: true };
     }
     return {
-      content: JSON.stringify({ ...row, tags: parseTags(row.tags) }, null, 2),
+      content: JSON.stringify(normalizeRjRow(row), null, 2),
       resultLabel: args.rj_code,
       isError: false,
     };

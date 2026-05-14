@@ -5,6 +5,8 @@ import type {
   CircleDetail,
   CircleWorksResponse,
   CircleLatestWorksResponse,
+  WorksListResponse,
+  WorksQueryPreset,
 } from "../types";
 
 export async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -97,6 +99,30 @@ export async function fetchCircleLatestWorks(circleName: string, limit = 10): Pr
   const q = new URLSearchParams({ circle_name: circleName, limit: String(limit) });
   const res = await fetch(`/api/circle/latest-works?${q}`);
   const data = (await res.json()) as CircleLatestWorksResponse & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "加载失败");
+  return data;
+}
+
+export interface WorksListParams {
+  preset: WorksQueryPreset;
+  page: number;
+  page_size: number;
+  circle?: string;
+  rj_code?: string;
+  title?: string;
+}
+
+export async function fetchWorksList(params: WorksListParams): Promise<WorksListResponse> {
+  const q = new URLSearchParams({
+    preset: params.preset,
+    page: String(params.page),
+    page_size: String(params.page_size),
+  });
+  if (params.circle) q.set("circle", params.circle);
+  if (params.rj_code) q.set("rj_code", params.rj_code);
+  if (params.title) q.set("title", params.title);
+  const res = await fetch(`/api/works/list?${q}`);
+  const data = (await res.json()) as WorksListResponse & { error?: string };
   if (!res.ok) throw new Error(data.error ?? "加载失败");
   return data;
 }

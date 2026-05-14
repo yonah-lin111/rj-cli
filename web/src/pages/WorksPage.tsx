@@ -1,0 +1,656 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchWorksList, postJson } from "@/lib/api";
+import type { DownloadLinksValue, WorkItem, WorksQueryPreset } from "@/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Eye,
+  Link2,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+
+const PAGE_SIZE_OPTIONS = ["5", "10", "20", "30", "50", "100"];
+const PRESET_OPTIONS: Array<{ value: WorksQueryPreset; label: string }> = [
+  { value: "latest-undownloaded", label: "最新未下载" },
+  { value: "latest-added", label: "最新添加" },
+];
+
+type ModalType = "detail" | "download-links" | null;
+
+interface ModalState {
+  type: ModalType;
+  item: WorkItem | null;
+}
+
+function getInitialParams() {
+  const p = new URLSearchParams(location.search);
+  const preset = p.get("preset");
+  return {
+    preset: preset === "latest-added" ? "latest-added" : "latest-undownloaded",
+    page_size: p.get("page_size") ?? "30",
+    circle: p.get("circle") ?? "",
+    rj_code: p.get("rj_code") ?? "",
+    title: p.get("title") ?? "",
+  } as {
+    preset: WorksQueryPreset;
+    page_size: string;
+    circle: string;
+    rj_code: string;
+    title: string;
+  };
+}
+
+function statusLabel(status?: number): string {
+  if (status === 1) return "已下载";
+  if (status === 2) return "已删除";
+  return "未下载";
+}
+
+function statusVariant(status?: number): "default" | "secondary" | "outline" {
+  if (status === 1) return "default";
+  if (status === 2) return "secondary";
+  return "outline";
+}
+
+function formatJson(value: DownloadLinksValue): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function downloadLinksSummary(value: DownloadLinksValue): string {
+  if (value == null) return "无";
+  if (typeof value === "string") return value.trim() ? "原始文本" : "无";
+  if (Array.isArray(value)) return `${value.length} 项`;
+  return `${Object.keys(value).length} 项`;
+}
+
+export default function WorksPage() {
+  const init = getInitialParams();
+  const [preset, setPreset] = useState<WorksQueryPreset>(init.preset);
+  const [pageSize, setPageSize] = useState(init.page_size);
+  const [circle, setCircle] = useState(init.circle);
+  const [rjCode, setRjCode] = useState(init.rj_code);
+  const [title, setTitle] = useState(init.title);
+
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [items, setItems] = useState<WorkItem[]>([]);
+  const [showDetails, setShowDetails] = useState(false);
+  const [status, setStatus] = useState<{
+    type: "idle" | "loading" | "error" | "ok";
+    msg?: string;
+  }>({ type: "idle" });
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [modal, setModal] = useState<ModalState>({ type: null, item: null });
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (modal.type) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [modal.type]);
+
+  const currentFilters = useMemo(
+    () => ({ preset, circle, rj_code: rjCode, title }),
+    [preset, circle, rjCode, title],
+  );
+
+  const load = useCallback(
+    async (
+      p: number,
+      ps: string,
+      filters: {
+        preset: WorksQueryPreset;
+        circle: string;
+        rj_code: string;
+        title: string;
+      },
+    ) => {
+      setStatus({ type: "loading" });
+      const q = new URLSearchParams({
+        preset: filters.preset,
+        page: String(p),
+        page_size: ps,
+      });
+      if (filters.circle.trim()) q.set("circle", filters.circle.trim());
+      if (filters.rj_code.trim()) q.set("rj_code", filters.rj_code.trim());
+      if (filters.title.trim()) q.set("title", filters.title.trim());
+      history.replaceState(null, "", "/works?" + q.toString());
+      try {
+        const data = await fetchWorksList({
+          preset: filters.preset,
+          page: p,
+          page_size: Number(ps),
+          circle: filters.circle.trim() || undefined,
+          rj_code: filters.rj_code.trim() || undefined,
+          title: filters.title.trim() || undefined,
+        });
+        setTotal(data.total);
+        setItems(data.data);
+        setStatus({ type: "ok", msg: `共 ${data.total} 条` });
+      } catch (err) {
+        setStatus({
+          type: "error",
+          msg: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void load(page, pageSize, currentFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const triggerSearch = (nextPage = 1) => {
+    setPage(nextPage);
+    void load(nextPage, pageSize, currentFilters);
+  };
+
+  const debouncedSearch = (nextFilters: Partial<typeof currentFilters> = {}) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const merged = { ...currentFilters, ...nextFilters };
+      setPage(1);
+      void load(1, pageSize, merged);
+    }, 300);
+  };
+
+  const handleReset = () => {
+    setPreset("latest-undownloaded");
+    setPageSize("30");
+    setCircle("");
+    setRjCode("");
+    setTitle("");
+    setPage(1);
+    void load(1, "30", {
+      preset: "latest-undownloaded",
+      circle: "",
+      rj_code: "",
+      title: "",
+    });
+  };
+
+  const closeModal = () => setModal({ type: null, item: null });
+
+  const handleRemoveWork = async (item: WorkItem) => {
+    if (!confirm(`确认删除作品「${item.rj_code}」？`)) return;
+    setActionLoading((prev) => ({ ...prev, [item.rj_code]: true }));
+    try {
+      await postJson("/api/rj/remove", { rj_code: item.rj_code });
+      setStatus({ type: "ok", msg: `已删除 ${item.rj_code}` });
+      void load(page, pageSize, currentFilters);
+      closeModal();
+    } catch (err) {
+      setStatus({
+        type: "error",
+        msg: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [item.rj_code]: false }));
+    }
+  };
+
+  const pages = Math.max(1, Math.ceil(total / Number(pageSize)));
+  const modalItem = modal.item;
+  const modalDownloadLinksText = modalItem ? formatJson(modalItem.download_links) : "";
+
+  return (
+    <div className="min-h-screen bg-background p-6">
+      <h1 className="mb-5 text-2xl font-bold text-foreground">作品管理</h1>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6 mb-4 items-end">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">预设查询</label>
+            <Select
+              value={preset}
+              onValueChange={(value) => {
+                const nextPreset = value as WorksQueryPreset;
+                setPreset(nextPreset);
+                setPage(1);
+                void load(1, pageSize, { ...currentFilters, preset: nextPreset });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRESET_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">社团</label>
+            <Input
+              placeholder="模糊查询社团"
+              value={circle}
+              onChange={(e) => {
+                const value = e.target.value;
+                setCircle(value);
+                debouncedSearch({ circle: value });
+              }}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">RJ号</label>
+            <Input
+              placeholder="输入 RJ 号"
+              value={rjCode}
+              onChange={(e) => {
+                const value = e.target.value;
+                setRjCode(value);
+                debouncedSearch({ rj_code: value });
+              }}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">标题</label>
+            <Input
+              placeholder="模糊查询标题"
+              value={title}
+              onChange={(e) => {
+                const value = e.target.value;
+                setTitle(value);
+                debouncedSearch({ title: value });
+              }}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs text-muted-foreground">每页</label>
+            <Select
+              value={pageSize}
+              onValueChange={(value) => {
+                setPageSize(value);
+                setPage(1);
+                void load(1, value, currentFilters);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={() => triggerSearch(1)}>
+            <Search className="mr-1.5 h-4 w-4" />查询
+          </Button>
+          <Button variant="outline" onClick={handleReset}>
+            <RotateCcw className="mr-1.5 h-4 w-4" />重置
+          </Button>
+        </div>
+
+        <div className="mb-3 flex items-center justify-between">
+          <span className={`text-sm ${status.type === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+            {status.type === "loading" ? "加载中..." : (status.msg ?? "")}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDetails((value) => !value)}
+          >
+            {showDetails ? (
+              <><ChevronUp className="mr-1.5 h-4 w-4" />隐藏详情</>
+            ) : (
+              <><ChevronDown className="mr-1.5 h-4 w-4" />显示详情</>
+            )}
+          </Button>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>RJ号</TableHead>
+                {showDetails && <TableHead className="w-20">封面</TableHead>}
+                <TableHead>标题</TableHead>
+                <TableHead>社团</TableHead>
+                <TableHead>状态</TableHead>
+                {showDetails && <TableHead>来源</TableHead>}
+                {showDetails && <TableHead>创建时间</TableHead>}
+                <TableHead>下载链接</TableHead>
+                <TableHead className="sticky right-0 w-40 bg-card">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.rj_code}>
+                  <TableCell className="font-medium">
+                    {item.title_url ? (
+                      <a
+                        href={item.title_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {item.rj_code}
+                      </a>
+                    ) : (
+                      item.rj_code
+                    )}
+                  </TableCell>
+                  {showDetails && (
+                    <TableCell>
+                      {item.thumbnail ? (
+                        <img
+                          src={item.thumbnail}
+                          alt={item.rj_code}
+                          className="h-14 w-14 rounded-md bg-muted object-cover"
+                        />
+                      ) : (
+                        <div className="h-14 w-14 rounded-md bg-muted" />
+                      )}
+                    </TableCell>
+                  )}
+                  <TableCell className="max-w-xs text-sm">
+                    {item.title_url ? (
+                      <a
+                        href={item.title_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="line-clamp-2 text-primary hover:underline"
+                      >
+                        {item.title ?? "-"}
+                      </a>
+                    ) : (
+                      <span className="line-clamp-2">{item.title ?? "-"}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {item.circle_url ? (
+                      <a
+                        href={item.circle_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {item.circle ?? "-"}
+                      </a>
+                    ) : (
+                      item.circle ?? <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge>
+                  </TableCell>
+                  {showDetails && (
+                    <TableCell className="text-sm text-muted-foreground">
+                      {item.source ?? "-"}
+                    </TableCell>
+                  )}
+                  {showDetails && (
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {item.created_at ?? "-"}
+                    </TableCell>
+                  )}
+                  <TableCell className="text-sm text-muted-foreground">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setModal({ type: "download-links", item })}
+                    >
+                      <Link2 className="mr-1 h-3.5 w-3.5" />
+                      {downloadLinksSummary(item.download_links)}
+                    </Button>
+                  </TableCell>
+                  <TableCell className="sticky right-0 bg-card">
+                    <div className="flex flex-col gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setModal({ type: "detail", item })}
+                      >
+                        <Eye className="mr-1 h-3.5 w-3.5" />查看详情
+                      </Button>
+                      {item.title_url && (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={item.title_url} target="_blank" rel="noreferrer">
+                            <ExternalLink className="mr-1 h-3.5 w-3.5" />打开链接
+                          </a>
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={actionLoading[item.rj_code]}
+                        onClick={() => void handleRemoveWork(item)}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />删除作品
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {items.length === 0 && status.type !== "loading" && (
+                <TableRow>
+                  <TableCell
+                    colSpan={showDetails ? 8 : 6}
+                    className="py-10 text-center text-muted-foreground"
+                  >
+                    暂无数据
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-3 text-sm text-muted-foreground">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => {
+              setPage((value) => value - 1);
+              void load(page - 1, pageSize, currentFilters);
+            }}
+          >
+            上一页
+          </Button>
+          <span>{page} / {pages}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= pages}
+            onClick={() => {
+              setPage((value) => value + 1);
+              void load(page + 1, pageSize, currentFilters);
+            }}
+          >
+            下一页
+          </Button>
+        </div>
+      </div>
+
+      {modal.type && modalItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={closeModal}
+        >
+          <div
+            className="flex max-h-[85vh] w-auto min-w-[min(90vw,560px)] max-w-[90vw] flex-col rounded-2xl border border-border bg-card shadow-[0_24px_64px_-12px_rgba(0,0,0,0.35)] animate-in fade-in-0 zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative shrink-0 overflow-hidden rounded-t-2xl border-b border-border px-6 py-5">
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent" />
+              <div className="relative flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-card-foreground">
+                    {modal.type === "detail" ? "作品详情" : "下载链接"}
+                  </h2>
+                  <p className="mt-0.5 text-sm text-muted-foreground">{modalItem.rj_code}</p>
+                </div>
+                <button
+                  onClick={closeModal}
+                  className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {modal.type === "detail" && (
+                <div className="space-y-5">
+                  <div className="flex gap-4">
+                    {modalItem.thumbnail ? (
+                      <img
+                        src={modalItem.thumbnail}
+                        alt={modalItem.rj_code}
+                        className="h-28 w-28 rounded-lg bg-muted object-cover"
+                      />
+                    ) : (
+                      <div className="h-28 w-28 rounded-lg bg-muted" />
+                    )}
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">标题</p>
+                        {modalItem.title_url ? (
+                          <a
+                            href={modalItem.title_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            {modalItem.title ?? "-"}
+                          </a>
+                        ) : (
+                          <p className="text-sm text-card-foreground">{modalItem.title ?? "-"}</p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">RJ号</p>
+                          <p>{modalItem.rj_code}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">状态</p>
+                          <Badge variant={statusVariant(modalItem.status)}>{statusLabel(modalItem.status)}</Badge>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">社团</p>
+                          {modalItem.circle_url ? (
+                            <a
+                              href={modalItem.circle_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              {modalItem.circle ?? "-"}
+                            </a>
+                          ) : (
+                            <p>{modalItem.circle ?? "-"}</p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">CV</p>
+                          <p>{modalItem.cv ?? "-"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">发售日期</p>
+                          <p>{modalItem.release_date ?? "-"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">来源</p>
+                          <p>{modalItem.source ?? "-"}</p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-xs text-muted-foreground">创建时间</p>
+                          <p>{modalItem.created_at ?? "-"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs text-muted-foreground">标签</p>
+                    <div className="flex flex-wrap gap-2">
+                      {modalItem.tags.length > 0 ? (
+                        modalItem.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary">{tag}</Badge>
+                        ))
+                      ) : (
+                        <span className="text-sm text-muted-foreground">无标签</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {modal.type === "download-links" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-muted-foreground">
+                      {modalItem.download_links == null ? "当前作品没有下载链接。" : "支持复制当前内容。"}
+                    </span>
+                    {modalItem.download_links != null && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void navigator.clipboard.writeText(modalDownloadLinksText)}
+                      >
+                        复制
+                      </Button>
+                    )}
+                  </div>
+                  {modalItem.download_links == null ? (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
+                      无下载链接
+                    </div>
+                  ) : (
+                    <pre className="overflow-x-auto rounded-lg border border-border bg-muted/30 p-4 text-xs leading-6 text-card-foreground whitespace-pre-wrap break-all">
+                      {modalDownloadLinksText}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import type { AutocompleteItem } from "@mariozechner/pi-tui";
 import { RJAutocompleteProvider } from "../src/utils/autocomplete.ts";
@@ -62,17 +66,44 @@ test("applyCompletion 对非 @ 前缀委托内置补全", () => {
   assert.equal(result.cursorCol, 6);
 });
 
-test("补全后的 @ 路径可被提交流程识别与展开", () => {
-  const provider = new RJAutocompleteProvider([], process.cwd());
-  const item: AutocompleteItem = { value: "@src/app.ts", label: "app.ts", description: "src/app.ts" };
-  const completion = provider.applyCompletion(["请查看 @src/ap"], 0, 11, item, "@src/ap");
-  assert.equal(completion.lines[0], "请查看 @src/app.ts");
+test("目录 @ 路径优先使用 bash 列出目录内容", () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "rj-file-reader-"));
+  const dirPath = join(tempRoot, "docs");
+  try {
+    mkdirSync(dirPath);
+    writeFileSync(join(dirPath, "a.txt"), "hello");
+    mkdirSync(join(dirPath, "nested"));
 
-  const mentions = extractAtMentions(completion.lines[0], process.cwd());
-  assert.equal(mentions.length, 1);
-  assert.equal(mentions[0]?.raw, "@src/app.ts");
+    const lsOutput = execFileSync("/bin/ls", ["-1Ap", dirPath], { encoding: "utf8" })
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter(Boolean);
+    const expanded = expandAtMentions(`请查看 @${dirPath}`, process.cwd());
 
-  const expanded = expandAtMentions(completion.lines[0], process.cwd());
-  assert.match(expanded.expanded, /<file name=.*src\/app\.ts">/);
-  assert.deepEqual(expanded.warnings, []);
+    assert.match(expanded.expanded, new RegExp(`<file name="${dirPath}" type="directory">`));
+    assert.deepEqual(expanded.warnings, []);
+    for (const line of lsOutput) {
+      assert.match(expanded.expanded, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("目录 @ 路径在 bash 结果中会展开为目录列表而不是报错", () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "rj-file-reader-"));
+  const dirPath = join(tempRoot, "docs");
+  try {
+    mkdirSync(dirPath);
+    writeFileSync(join(dirPath, "a.txt"), "hello");
+    mkdirSync(join(dirPath, "nested"));
+
+    const expanded = expandAtMentions(`请查看 @${dirPath}`, process.cwd());
+    assert.match(expanded.expanded, new RegExp(`<file name="${dirPath}" type="directory">`));
+    assert.match(expanded.expanded, /nested\//);
+    assert.match(expanded.expanded, /a\.txt/);
+    assert.deepEqual(expanded.warnings, []);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });

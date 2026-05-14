@@ -1,4 +1,5 @@
 export type RankingType = "24h" | "7d" | "30d" | "year";
+export type WorksQueryPreset = "latest-added" | "latest-undownloaded";
 
 export interface RankItem {
   rank: number;
@@ -83,4 +84,30 @@ export interface CircleLatestWorksResponse {
   circle_url: string;
   total: number;
   items: CircleLatestWork[];
+}
+
+export type DownloadLinksValue = Record<string, unknown> | unknown[] | string | null;
+
+export interface WorkItem {
+  rj_code: string;
+  title?: string;
+  title_url?: string;
+  circle?: string;
+  circle_url?: string;
+  cv?: string;
+  tags: string[];
+  release_date?: string;
+  thumbnail?: string | null;
+  source?: string;
+  status?: number;
+  created_at?: string;
+  download_links: DownloadLinksValue;
+}
+
+export interface WorksListResponse {
+  preset: WorksQueryPreset;
+  total: number;
+  page: number;
+  page_size: number;
+  data: WorkItem[];
 }

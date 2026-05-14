@@ -1,6 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { accessSync, constants, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { extname, isAbsolute, resolve } from "node:path";
 import type { RJFileReadingConfig } from "../../core/config.ts";
 
 /** 匹配 Unicode 非标准空格字符 */
@@ -43,26 +44,52 @@ const fileExists = (filePath: string): boolean => {
   }
 };
 
+const listDirectoryWithNode = (dirPath: string, maxEntries: number): string => {
+  const entries = readdirSync(dirPath, { withFileTypes: true });
+  const sorted = entries
+    .sort((a, b) => {
+      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  const limited = sorted.slice(0, maxEntries);
+  const lines = limited.map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name));
+  if (sorted.length > maxEntries) {
+    lines.push(`... (${sorted.length - maxEntries} more entries)`);
+  }
+  return lines.join("\n");
+};
+
+const listDirectoryWithBash = (dirPath: string, maxEntries: number): string => {
+  const stdout = execFileSync("/bin/ls", ["-1Ap", dirPath], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  });
+  const lines = stdout
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+  if (lines.length <= maxEntries) return lines.join("\n");
+  return [...lines.slice(0, maxEntries), `... (${lines.length - maxEntries} more entries)`].join("\n");
+};
+
 /**
- * 列出目录内容，目录优先，超出 maxEntries 时追加省略提示。
+ * 列出目录内容，优先使用 bash，失败时回退到 Node 方案。
  */
 const listDirectory = (dirPath: string, maxEntries: number): string => {
   try {
-    const entries = readdirSync(dirPath, { withFileTypes: true });
-    const sorted = entries
-      .sort((a, b) => {
-        if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-    const limited = sorted.slice(0, maxEntries);
-    const lines = limited.map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name));
-    if (sorted.length > maxEntries) {
-      lines.push(`... (${sorted.length - maxEntries} more entries)`);
-    }
-    return lines.join("\n");
+    return listDirectoryWithBash(dirPath, maxEntries);
   } catch {
-    return "(unable to read directory)";
+    try {
+      return listDirectoryWithNode(dirPath, maxEntries);
+    } catch {
+      return "(unable to read directory)";
+    }
   }
+};
+
+const isAllowedFile = (filePath: string, allowedExts: string[]): boolean => {
+  if (allowedExts.length === 0) return true;
+  return allowedExts.includes(extname(filePath));
 };
 
 /** @ 引用解析结果 */
@@ -134,30 +161,28 @@ export const expandAtMentions = (
     }
 
     let block: string;
-    if (mention.isDirectory) {
-      const listing = listDirectory(mention.path, maxEntries);
-      block = `<file name="${mention.path}" type="directory">\n${listing}\n</file>`;
-    } else {
-      if (allowedExts.length > 0) {
-        const ext = mention.path.slice(mention.path.lastIndexOf("."));
-        if (!allowedExts.includes(ext)) {
-          warnings.push(`Skipped ${mention.path}: extension ${ext} not in allowedExtensions`);
+    try {
+      const stats = statSync(mention.path);
+      if (stats.isDirectory()) {
+        const listing = listDirectory(mention.path, maxEntries);
+        block = `<file name="${mention.path}" type="directory">\n${listing}\n</file>`;
+      } else {
+        if (!isAllowedFile(mention.path, allowedExts)) {
+          const ext = extname(mention.path);
+          warnings.push(`Skipped ${mention.path}: extension ${ext || "(none)"} not in allowedExtensions`);
           continue;
         }
-      }
-      try {
-        const stats = statSync(mention.path);
         if (stats.size > maxSize) {
           warnings.push(`Skipped ${mention.path}: file size ${stats.size} exceeds maxFileSizeBytes ${maxSize}`);
           continue;
         }
         const content = readFileSync(mention.path, "utf-8");
         block = `<file name="${mention.path}">\n${content}\n</file>`;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        warnings.push(`Could not read ${mention.path}: ${msg}`);
-        continue;
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`Could not read ${mention.path}: ${msg}`);
+      continue;
     }
 
     result = result.replace(mention.raw, block);
