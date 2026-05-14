@@ -28,6 +28,7 @@ export type CommandAction =
   | { type: "undo" }
   | { type: "quit" }
   | { type: "chat"; text: string }
+  | { type: "command-chat"; displayText: string; promptText: string }
   | { type: "fill-input"; text: string; cursorCol?: number };
 
 /** 斜杠命令定义 */
@@ -108,8 +109,9 @@ const commandList: SlashCommand[] = [
         return { type: "fill-input", text: "/workMatch []", cursorCol: "/workMatch [".length };
       }
       return {
-        type: "chat",
-        text: `请对作品文件夹 "${path}" 执行单文件夹作品匹配和格式转换流程：
+        type: "command-chat",
+        displayText: `/workMatch [${path}]`,
+        promptText: `请对作品文件夹 "${path}" 执行单文件夹作品匹配和格式转换流程：
 1. 调用 rj_work_ops_preview 预览（target_format 默认 "flac"，multi_folder=false）
 2. 根据预览结果，用一次 ask 调用同时询问所有参数：格式转换、线程数、是否保留源文件、封面图片选择、输出路径
 3. 根据用户回答调用 rj_work_ops_process 执行处理（multi_folder=false）`,
@@ -127,8 +129,9 @@ const commandList: SlashCommand[] = [
         return { type: "fill-input", text: "/workMatchMulti []", cursorCol: "/workMatchMulti [".length };
       }
       return {
-        type: "chat",
-        text: `请对作品文件夹 "${path}" 执行多文件夹作品匹配和格式转换流程：
+        type: "command-chat",
+        displayText: `/workMatchMulti [${path}]`,
+        promptText: `请对作品文件夹 "${path}" 执行多文件夹作品匹配和格式转换流程：
 1. 调用 rj_work_ops_preview 预览（target_format 默认 "flac"，multi_folder=true）
 2. 根据预览结果，用一次 ask 调用同时询问所有参数：格式转换、线程数、是否保留源文件、封面图片选择、输出路径、选择哪些子文件夹
 3. 根据用户回答调用 rj_work_ops_process 执行处理（multi_folder=true，传入 selected_folders）`,

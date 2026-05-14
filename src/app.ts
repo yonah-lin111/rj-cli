@@ -47,6 +47,13 @@ type OpenUrlCommand = {
   label: string;
 };
 
+type ChatSubmission = {
+  kind: "user" | "command";
+  displayText: string;
+  promptText: string;
+  label?: string;
+};
+
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
 export class RJApp {
   private config = loadConfig();
@@ -82,7 +89,13 @@ export class RJApp {
   private runningAI = false;
   private runningBash = false;
   private activeAIAbort?: AbortController;
-  private activeQA?: { user: Message; assistant?: Message; sessionStartIndex: number; promptText: string };
+  private activeQA?: {
+    user: Message;
+    assistant?: Message;
+    sessionStartIndex: number;
+    promptText: string;
+    restoreText: string;
+  };
   private cancelledQA?: { sessionStartIndex: number };
   private pendingUndoPrompt?: string;
   private lastEscapeAt = 0;
@@ -338,21 +351,30 @@ export class RJApp {
   }
 
   private async handleChat(text: string): Promise<void> {
+    await this.submitChat({
+      kind: "user",
+      displayText: text,
+      promptText: text,
+      label: "user",
+    });
+  }
+
+  private async submitChat(submission: ChatSubmission): Promise<void> {
     if (this.runningAI) {
       this.addMessage("warning", "An AI request is already running. Wait for it to finish.", "warning");
       this.requestRender();
       return;
     }
 
-    const { expanded, warnings } = expandAtMentions(text, this.state.cwd, this.config.fileReading);
+    const { expanded, warnings } = expandAtMentions(submission.promptText, this.state.cwd, this.config.fileReading);
     for (const warning of warnings) {
       this.addMessage("warning", warning, "warning");
     }
 
     const isFirstMessage = this.sessionMessages.length === 0;
     this.runningAI = true;
-    const user = this.addMessage("user", text, "user");
-    if (expanded !== text) user.expandedText = expanded;
+    const user = this.addMessage(submission.kind, submission.displayText, submission.label);
+    if (submission.kind === "user" && expanded !== submission.displayText) user.expandedText = expanded;
     this.state.messageCount++;
     this.updateContextUsage();
 
@@ -376,7 +398,13 @@ export class RJApp {
       assistantIndex = this.messages.length;
       assistant = this.addMessage("assistant", "", "RJ");
       assistant.segments = [];
-      this.activeQA = { user, assistant, sessionStartIndex, promptText: text };
+      this.activeQA = {
+        user,
+        assistant,
+        sessionStartIndex,
+        promptText: submission.promptText,
+        restoreText: submission.displayText,
+      };
       await streamChat({
         provider,
         model: model.id,
@@ -704,7 +732,7 @@ export class RJApp {
     }
 
     if (isFirstMessage && !this.currentSessionTitle && !abortController.signal.aborted) {
-      void generateSessionTitle(provider, model.id, text).then((title) => {
+      void generateSessionTitle(provider, model.id, submission.promptText).then((title) => {
         if (title && !this.currentSessionTitle) {
           this.currentSessionTitle = title;
           this.persistSession();
@@ -845,7 +873,7 @@ export class RJApp {
     if (action.type === "undo") {
       if (this.runningAI && this.activeQA) {
         const activeQA = this.activeQA;
-        this.pendingUndoPrompt = activeQA.promptText;
+        this.pendingUndoPrompt = activeQA.restoreText;
         const userIndex = this.messages.indexOf(activeQA.user);
         if (userIndex >= 0) this.messages.splice(userIndex, activeQA.assistant ? 2 : 1);
         this.sessionMessages.splice(activeQA.sessionStartIndex);
@@ -908,6 +936,16 @@ export class RJApp {
       }
       this.requestRender();
       return false;
+    }
+
+    if (action.type === "command-chat") {
+      void this.submitChat({
+        kind: "command",
+        displayText: action.displayText,
+        promptText: action.promptText,
+        label: "command",
+      });
+      return true;
     }
 
     if (action.type === "chat") {
@@ -1058,17 +1096,27 @@ export class RJApp {
       "30d": "月",
       year: "年",
     };
+    const periodFlags: Record<RankSelection["rankingType"], string> = {
+      "24h": "-Day",
+      "7d": "-Week",
+      "30d": "-Month",
+      year: "-Year",
+    };
 
     if (selection.openPage) {
       await this.openRankPage(selection);
       return;
     }
 
-    const text = `请输出 RJ ${periodNames[selection.rankingType]}排行榜前 ${selection.pageSize} 条：
+    await this.submitChat({
+      kind: "command",
+      displayText: `/rank -View only ${periodFlags[selection.rankingType]} -${selection.pageSize} rows`,
+      promptText: `请输出 RJ ${periodNames[selection.rankingType]}排行榜前 ${selection.pageSize} 条：
 1. 调用 rj_get_ranking，参数 ranking_type="${selection.rankingType}"、page=1、page_size=${selection.pageSize}
 2. 将返回 items 渲染为 Markdown 表格，列包含 排名、RJ号、标题、社团、CV、发售日
-3. 只在回复中输出表格，不导出文件`;
-    await this.handleChat(text);
+3. 只在回复中输出表格，不导出文件`,
+      label: "command",
+    });
   }
 
   private async openRankPage(selection: RankSelection): Promise<void> {
@@ -1078,14 +1126,25 @@ export class RJApp {
     const url = `http://127.0.0.1:${address.port}/?ranking_type=${encodeURIComponent(selection.rankingType)}&page_size=${selection.pageSize}`;
     const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
     this.openUrlCommand = opener;
-    await this.handleChat(`请使用 bash 工具打开 RJ 排行榜页面，并在命令执行后简短说明页面已打开，支持分页、排行周期切换以及 RJ号/标题/社团/CV 条件查询。
+    const periodFlags: Record<RankSelection["rankingType"], string> = {
+      "24h": "-Day",
+      "7d": "-Week",
+      "30d": "-Month",
+      year: "-Year",
+    };
+    await this.submitChat({
+      kind: "command",
+      displayText: `/rank -Open page ${periodFlags[selection.rankingType]} -${selection.pageSize} rows`,
+      promptText: `请使用 bash 工具打开 RJ 排行榜页面，并在命令执行后简短说明页面已打开，支持分页、排行周期切换以及 RJ号/标题/社团/CV 条件查询。
 
 要求：
 1. 当前系统打开命令是 ${opener.command}
 2. 页面地址是 ${url}
 3. 只调用一次 bash 工具打开页面
 4. 命令中必须安全引用 URL，不要拼接未转义的参数
-5. bash 完成后简短回复打开结果`);
+5. bash 完成后简短回复打开结果`,
+      label: "command",
+    });
   }
 
   private showCircleSelector(): void {
@@ -1131,14 +1190,19 @@ export class RJApp {
       return;
     }
 
-    await this.handleChat(`请输出社团”${selection.circleName}”的详情和最新发布作品：
+    await this.submitChat({
+      kind: "command",
+      displayText: `/circle [${selection.circleName}]`,
+      promptText: `请输出社团”${selection.circleName}”的详情和最新发布作品：
 1. 调用 circle_get_detail，参数 name=${selection.circleName}
 2. 调用 circle_get_latest_works，参数 circle_name=${selection.circleName}、limit=10
 3. 输出”社团基本信息”小节：社团名、昵称、链接、备注、创建时间、本地作品数
 4. 输出”DLsite 最新 10 部作品”Markdown 表格：RJ号、标题、发售日、全年龄
 5. 标题非空时渲染为 Markdown 链接（使用 title_url）
 6. 如果 circle_get_latest_works 返回错误或 items 为空，输出”暂无最新作品（可能未设置 circle_url）”
-7. 只输出结果，不导出文件`);
+7. 只输出结果，不导出文件`,
+      label: "command",
+    });
   }
 
   private async openCirclePage(): Promise<void> {
@@ -1148,14 +1212,19 @@ export class RJApp {
     const url = `http://127.0.0.1:${address.port}/circle?page_size=30`;
     const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
     this.openUrlCommand = opener;
-    await this.handleChat(`请使用 bash 工具打开本地社团管理页面，并在命令执行后简短说明页面已打开，支持社团新增/编辑/删除，以及社团作品查询、添加和移除。
+    await this.submitChat({
+      kind: "command",
+      displayText: "/circle -Open page",
+      promptText: `请使用 bash 工具打开本地社团管理页面，并在命令执行后简短说明页面已打开，支持社团新增/编辑/删除，以及社团作品查询、添加和移除。
 
 要求：
 1. 当前系统打开命令是 ${opener.command}
 2. 页面地址是 ${url}
 3. 只调用一次 bash 工具打开页面
 4. 命令中必须安全引用 URL，不要拼接未转义的参数
-5. bash 完成后简短回复打开结果`);
+5. bash 完成后简短回复打开结果`,
+      label: "command",
+    });
   }
 
   private showWorksSelector(): void {
@@ -1208,11 +1277,22 @@ export class RJApp {
       : selection.queryPreset === "latest-added"
         ? "最新 5 条已添加作品"
         : "全部作品";
-    await this.handleChat(`请查询本地作品数据并只输出结果表格：
+    const presetFlags: Record<WorksSelection["queryPreset"], string> = {
+      all: "-All",
+      "latest-added": "-Latest added",
+      "latest-undownloaded": "-Latest undownloaded",
+    };
+    const circleFlag = selection.circleName ? ` -Circle [${selection.circleName}]` : "";
+    await this.submitChat({
+      kind: "command",
+      displayText: `/works -View only ${presetFlags[selection.queryPreset]}${circleFlag}`,
+      promptText: `请查询本地作品数据并只输出结果表格：
 1. 调用 rj_query，参数 ${filters.join("、")}
 2. 将返回 data 渲染为 Markdown 表格，列至少包含 RJ号、标题、社团、状态、创建时间
 3. 如果标题存在且带有 title_url，则渲染为 Markdown 链接
-4. 不要输出解释、总结或额外文字，本次查询目标是：${presetText}${selection.circleName ? `（社团：${selection.circleName}）` : ""}`);
+4. 不要输出解释、总结或额外文字，本次查询目标是：${presetText}${selection.circleName ? `（社团：${selection.circleName}）` : ""}`,
+      label: "command",
+    });
   }
 
   private async openWorksPage(selection: WorksSelection): Promise<void> {
@@ -1225,14 +1305,25 @@ export class RJApp {
     const url = `http://127.0.0.1:${address.port}/works?${params.toString()}`;
     const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
     this.openUrlCommand = opener;
-    await this.handleChat(`请使用 bash 工具打开本地作品管理页面，并在命令执行后简短说明页面已打开，支持分页、预设切换、社团/RJ号/标题筛选，以及查看详情和下载链接。
+    const presetFlags: Record<WorksSelection["queryPreset"], string> = {
+      all: "-All",
+      "latest-added": "-Latest added",
+      "latest-undownloaded": "-Latest undownloaded",
+    };
+    const circleFlag = selection.circleName ? ` -Circle [${selection.circleName}]` : "";
+    await this.submitChat({
+      kind: "command",
+      displayText: `/works -Open page ${presetFlags[selection.queryPreset]}${circleFlag}`,
+      promptText: `请使用 bash 工具打开本地作品管理页面，并在命令执行后简短说明页面已打开，支持分页、预设切换、社团/RJ号/标题筛选，以及查看详情和下载链接。
 
 要求：
 1. 当前系统打开命令是 ${opener.command}
 2. 页面地址是 ${url}
 3. 只调用一次 bash 工具打开页面
 4. 命令中必须安全引用 URL，不要拼接未转义的参数
-5. bash 完成后简短回复打开结果`);
+5. bash 完成后简短回复打开结果`,
+      label: "command",
+    });
   }
 
   private showSessionSelector(): void {

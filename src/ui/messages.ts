@@ -323,7 +323,7 @@ export class MessagesView implements Component {
 
     const lines: string[] = [];
     for (const message of messages) {
-      if (message.kind === "user" && lines.length > 0) {
+      if ((message.kind === "user" || message.kind === "command") && lines.length > 0) {
         if (lines[lines.length - 1] !== "") lines.push("");
         lines.push(theme.muted("─".repeat(Math.max(20, width - 2))));
         lines.push("");
