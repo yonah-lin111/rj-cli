@@ -11,7 +11,7 @@ import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
 import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
-import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool } from "./tools/rj-server/index.ts";
+import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool, matchMegaResources, matchAsmroOneResources, type ResourceMatchResult, type ResourceMatchSelection } from "./tools/rj-server/index.ts";
 import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
   executeUploadMegaFile,
@@ -28,6 +28,7 @@ import { Footer } from "./ui/footer.ts";
 import { headerText, subagentHeaderText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { RankSelector, type RankSelection } from "./ui/rank-selector.ts";
+import { ResourceMatchSelector } from "./ui/resource-match-selector.ts";
 import { CircleSelector, type CircleSelection, type CircleSelectorItem } from "./ui/circle-selector.ts";
 import { WorksSelector, type WorksSelection, type WorksSelectorItem } from "./ui/works-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
@@ -74,6 +75,8 @@ export class RJApp {
   private todoLoadingTimer?: NodeJS.Timeout;
   private modelSelector?: ModelSelector;
   private rankSelector?: RankSelector;
+  private resourceMatchSelector?: ResourceMatchSelector;
+  private resourceMatchMode?: "mega" | "asmrone";
   private circleSelector?: CircleSelector;
   private worksSelector?: WorksSelector;
   private rankPageServer?: Server;
@@ -221,6 +224,12 @@ export class RJApp {
 
       if (this.rankSelector) {
         this.rankSelector.handleInput(data);
+        this.requestRender();
+        return { consume: true };
+      }
+
+      if (this.resourceMatchSelector) {
+        this.resourceMatchSelector.handleInput(data);
         this.requestRender();
         return { consume: true };
       }
@@ -995,6 +1004,18 @@ export class RJApp {
       return true;
     }
 
+    if (action.type === "show-match-mega-selector") {
+      this.showResourceMatchSelector("mega");
+      this.requestRender();
+      return true;
+    }
+
+    if (action.type === "show-match-asmrone-selector") {
+      this.showResourceMatchSelector("asmrone");
+      this.requestRender();
+      return true;
+    }
+
     if (action.type === "show-circle-selector") {
       this.showCircleSelector();
       this.requestRender();
@@ -1234,6 +1255,112 @@ export class RJApp {
   private closeRankSelector(): void {
     this.rankSelector = undefined;
     this.tui.setFocus(this.editor);
+  }
+
+  private showResourceMatchSelector(mode: "mega" | "asmrone"): void {
+    const selector = new ResourceMatchSelector(
+      (selection) => {
+        this.closeResourceMatchSelector();
+        void this.handleResourceMatchSelection(mode, selection);
+      },
+      () => {
+        this.closeResourceMatchSelector();
+        this.requestRender();
+      },
+    );
+    this.resourceMatchMode = mode;
+    this.resourceMatchSelector = selector;
+    this.refreshChat();
+    this.tui.setFocus(selector);
+  }
+
+  private closeResourceMatchSelector(): void {
+    this.resourceMatchSelector = undefined;
+    this.resourceMatchMode = undefined;
+    this.tui.setFocus(this.editor);
+  }
+
+  private async handleResourceMatchSelection(
+    mode: "mega" | "asmrone",
+    selection: ResourceMatchSelection,
+  ): Promise<void> {
+    const displayText = mode === "mega"
+      ? selection.matchAll ? "/matchMega -All" : `/matchMega -RJ [${selection.rjCode}]`
+      : selection.matchAll ? "/matchASMROne -All" : `/matchASMROne -RJ [${selection.rjCode}]`;
+    this.addMessage("command", displayText, "command");
+
+    try {
+      const result = mode === "mega"
+        ? matchMegaResources(selection)
+        : await matchAsmroOneResources(selection);
+      this.addMessage("system", this.formatResourceMatchResult(result), "result");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.addMessage("error", message, "error");
+    }
+    this.requestRender();
+  }
+
+  private formatResourceMatchResult(result: ResourceMatchResult): string {
+    if (result.message && result.total === 0) {
+      return result.message;
+    }
+
+    const title = result.mode === "mega" ? "Mega 资源匹配结果" : "ASMR.ONE 资源匹配结果";
+    const summary = [
+      `模式：${result.total === 1 && !result.items[0]?.message?.startsWith("works:") && !result.items[0]?.message?.startsWith("MEGA:") ? "单个 RJ" : result.total <= 1 && !result.items[0] ? "批量" : (result.total === 1 && !result.items[0]?.exists && !result.message ? "单个 RJ" : undefined)}`,
+    ];
+    const modeText = result.total === 1 && !(result.message === "没有符合条件的任务") ? "单个 RJ" : "批量";
+    const lines = [
+      title,
+      `模式：${modeText}`,
+      `检查总数：${result.total}`,
+      `存在：${result.matched}`,
+      `不存在：${result.unmatched}`,
+      `失败：${result.errors}`,
+    ];
+
+    if (result.message && result.total > 0) {
+      lines.push(`说明：${result.message}`);
+    }
+
+    const matched = result.items.filter((item) => item.exists);
+    const unmatched = result.items.filter((item) => !item.exists && !item.message);
+    const failed = result.items.filter((item) => !item.exists && Boolean(item.message));
+
+    if (result.total === 1) {
+      const item = result.items[0];
+      if (!item) return lines.join("\n");
+      lines.push("", `RJ：${item.rjCode}`, `结果：${item.exists ? "存在" : item.message ? "失败" : "不存在"}`);
+      lines.push(`标题：${item.title ?? "-"}`);
+      lines.push(`社团：${item.circle ?? "-"}`);
+      if (item.message) lines.push(`补充：${item.message}`);
+      return lines.join("\n");
+    }
+
+    if (matched.length > 0) {
+      lines.push("", "命中列表:");
+      for (const item of matched) {
+        const suffix = item.message ? ` · ${item.message}` : "";
+        lines.push(`- ${item.rjCode} · ${item.title ?? "-"} · ${item.circle ?? "-"}${suffix}`);
+      }
+    }
+
+    if (unmatched.length > 0) {
+      lines.push("", "未命中 RJ:");
+      for (const item of unmatched) {
+        lines.push(`- ${item.rjCode}`);
+      }
+    }
+
+    if (failed.length > 0) {
+      lines.push("", "失败 RJ:");
+      for (const item of failed) {
+        lines.push(`- ${item.rjCode} · ${item.message}`);
+      }
+    }
+
+    return lines.join("\n");
   }
 
   private async handleRankSelection(selection: RankSelection): Promise<void> {
@@ -1663,6 +1790,8 @@ export class RJApp {
       this.chat.addChild(this.modelSelector);
     } else if (this.rankSelector) {
       this.chat.addChild(this.rankSelector);
+    } else if (this.resourceMatchSelector) {
+      this.chat.addChild(this.resourceMatchSelector);
     } else if (this.circleSelector) {
       this.chat.addChild(this.circleSelector);
     } else if (this.worksSelector) {

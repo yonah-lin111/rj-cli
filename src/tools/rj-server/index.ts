@@ -1,6 +1,7 @@
 import { openDb, parseTags, serializeTags, normalizeRjCode } from "./db.ts";
 import { cacheGet, cacheSet, rankingCacheKey } from "./cache.ts";
 import { scrapeRanking, scrapeWorkDetail, scrapeCircleLatestWorks, type RankingType, type RankingItem } from "./scraper.ts";
+import { matchMegaResources, matchAsmroOneResources, type ResourceMatchSelection, type ResourceMatchResult } from "./resource-match.ts";
 import { parsePositiveInt, parseRankingType } from "../../app/rank-page.ts";
 
 export interface RjServerToolResult {
@@ -8,6 +9,9 @@ export interface RjServerToolResult {
   resultLabel: string;
   isError: boolean;
 }
+
+export type { ResourceMatchSelection, ResourceMatchResult };
+export { matchMegaResources, matchAsmroOneResources };
 
 // ── 排行榜 ──────────────────────────────────────────────────────────────────
 

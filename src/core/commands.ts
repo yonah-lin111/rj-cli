@@ -28,6 +28,8 @@ export type CommandAction =
   | { type: "system-messages"; messages: string[] }
   | { type: "show-model-selector"; search: string }
   | { type: "show-rank-selector" }
+  | { type: "show-match-mega-selector" }
+  | { type: "show-match-asmrone-selector" }
   | { type: "show-circle-selector" }
   | { type: "show-works-selector" }
   | { type: "show-session-selector" }
@@ -84,6 +86,18 @@ const commandList: SlashCommand[] = [
     usage: "/rank",
     description: "Open the RJ ranking selector.",
     handler: () => ({ type: "show-rank-selector" }),
+  },
+  {
+    name: "/matchMega",
+    usage: "/matchMega",
+    description: "Check resource existence in Mega.",
+    handler: () => ({ type: "show-match-mega-selector" }),
+  },
+  {
+    name: "/matchASMROne",
+    usage: "/matchASMROne",
+    description: "Check resource existence in ASMR.ONE.",
+    handler: () => ({ type: "show-match-asmrone-selector" }),
   },
   {
     name: "/circle",
