@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchRanking, postJson } from "@/lib/api";
 import type { RankingType, RankItem } from "@/types";
+import { PageHeaderNav } from "@/components/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -210,6 +211,7 @@ export default function RankPage() {
 
   return (
     <div className="min-h-screen bg-background p-6">
+      <PageHeaderNav />
       <h1 className="text-2xl font-bold mb-5 text-foreground">RJ Rankings</h1>
       <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
         {/* Filters */}

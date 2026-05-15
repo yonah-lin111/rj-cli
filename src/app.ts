@@ -963,6 +963,11 @@ export class RJApp {
       return true;
     }
 
+    if (action.type === "open-web-ui") {
+      void this.openWebUI();
+      return true;
+    }
+
     if (action.type === "show-rank-selector") {
       this.showRankSelector();
       this.requestRender();
@@ -1051,6 +1056,30 @@ export class RJApp {
     for (const message of action.messages) this.showPrompt(message);
     this.requestRender();
     return true;
+  }
+
+  private async openWebUI(): Promise<void> {
+    if (!this.openUrlCommand) {
+      this.showPrompt("Open command is not available.");
+      this.requestRender();
+      return;
+    }
+    try {
+      const server = await ensureRankPageServer(this.rankPageServer);
+      this.rankPageServer = server;
+      const address = server.address() as AddressInfo;
+      runBash(`nohup ${this.openUrlCommand.command} http://127.0.0.1:${address.port}/rank >/dev/null 2>&1 &`)
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.showPrompt(`Failed to open Web UI: ${message}`);
+          this.requestRender();
+        });
+      this.showPrompt(`Opened Web UI: http://127.0.0.1:${address.port}/rank`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.showPrompt(`Failed to prepare Web UI: ${message}`);
+    }
+    this.requestRender();
   }
 
   private async handleUploadMegaFile(sourcePath: string): Promise<void> {

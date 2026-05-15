@@ -21,7 +21,7 @@ export const ensureRankPageServer = async (server?: Server): Promise<Server> =>
   server?.listening ? server : await startRankPageServer();
 
 export const buildRankPageUrl = (address: AddressInfo, rankingType: string, pageSize: number): string =>
-  `http://127.0.0.1:${address.port}/?ranking_type=${encodeURIComponent(rankingType)}&page_size=${pageSize}`;
+  `http://127.0.0.1:${address.port}/rank?ranking_type=${encodeURIComponent(rankingType)}&page_size=${pageSize}`;
 
 export const buildCirclePageUrl = (address: AddressInfo): string =>
   `http://127.0.0.1:${address.port}/circle?page_size=30`;

@@ -11,6 +11,7 @@ import type {
   CircleWork,
   CircleLatestWork,
 } from "@/types";
+import { PageHeaderNav } from "@/components/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -355,6 +356,7 @@ export default function CirclePage() {
 
   return (
     <div className="min-h-screen bg-background p-6">
+      <PageHeaderNav />
       <h1 className="text-2xl font-bold mb-5 text-foreground">Circle Management</h1>
 
       {/* Circle list */}

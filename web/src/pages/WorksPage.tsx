@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchWorksList, updateWorkStatus } from "@/lib/api";
 import type { DownloadLinksValue, WorkItem, WorksQueryPreset } from "@/types";
+import { PageHeaderNav } from "@/components/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -294,6 +295,7 @@ export default function WorksPage() {
 
   return (
     <div className="min-h-screen bg-background p-6">
+      <PageHeaderNav />
       <h1 className="mb-5 text-2xl font-bold text-foreground">Works Management</h1>
       <div className="rounded-xl border border-border bg-card p-5 shadow-lg">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7 mb-4 items-end">

@@ -27,6 +27,7 @@ export type CommandAction =
   | { type: "messages"; messages: string[] }
   | { type: "system-messages"; messages: string[] }
   | { type: "show-model-selector"; search: string }
+  | { type: "open-web-ui" }
   | { type: "show-rank-selector" }
   | { type: "show-match-mega-selector" }
   | { type: "show-match-asmrone-selector" }
@@ -80,6 +81,12 @@ const commandList: SlashCommand[] = [
       type: "show-model-selector",
       search: args.join(" ").trim(),
     }),
+  },
+  {
+    name: "/webUI",
+    usage: "/webUI",
+    description: "Open the embedded Web UI.",
+    handler: () => ({ type: "open-web-ui" }),
   },
   {
     name: "/rank",
@@ -251,6 +258,7 @@ export const helpText = (): string => {
   const notes = [
     "Tips:",
     "!command".padEnd(16) + "Run a bash command, e.g. !pwd",
+    "/webUI".padEnd(16) + "Open the embedded Web UI in your browser",
     "/workMatch".padEnd(16) + "Use [] to insert a folder path",
     "/workMatchMulti".padEnd(16) + "Process subfolders under a root folder",
     "/uploadMegaFile".padEnd(16) + "Use -[path] to copy a file into ~/.RJ",

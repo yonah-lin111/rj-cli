@@ -21,6 +21,7 @@ export interface RJModelConfig {
 export interface RJProviderConfig {
   id: string;
   name: string;
+  enabled?: boolean;
   npm?: string;
   baseURL?: string;
   apiKey?: string;
@@ -162,6 +163,7 @@ const parseProvider = (value: unknown): RJProviderConfig | null => {
   return {
     id,
     name,
+    enabled: record.enabled !== false,
     npm: readString(record, "npm"),
     baseURL: readString(record, "baseURL"),
     apiKey: readString(record, "apiKey"),
@@ -182,7 +184,7 @@ export const loadConfig = (): RJConfig => {
     if (!root) return fallbackConfig;
 
     const providers = Array.isArray(root.providers)
-      ? root.providers.map(parseProvider).filter((provider): provider is RJProviderConfig => Boolean(provider))
+      ? root.providers.map(parseProvider).filter((provider): provider is RJProviderConfig => Boolean(provider && provider.enabled !== false))
       : [];
     if (providers.length === 0) return fallbackConfig;
 

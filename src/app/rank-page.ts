@@ -41,7 +41,7 @@ export const startRankPageServer = async (): Promise<Server> => {
 
 const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
-  if (url.pathname === "/") {
+  if (url.pathname === "/" || url.pathname === "/rank") {
     await sendRankPageHtml(res);
     return;
   }
