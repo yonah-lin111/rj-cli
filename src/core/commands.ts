@@ -65,6 +65,21 @@ const buildUploadMegaFileConfirmQuestions = (plan: UploadMegaFilePlan): AskQuest
   cancelDescription: "Cancel this upload and keep the existing file.",
 });
 
+const buildOverwritePrompt = (): string => `请基于本地 RJ 数据库生成一段用户可读的中文概览。
+
+执行要求：
+1. 必须先调用一次且仅调用一次 rj_get_overview。
+2. 只能基于工具返回结果总结，不得臆造、补充或猜测工具未提供的数据。
+3. 输出必须使用简体中文，不要直接粘贴原始 JSON。
+4. 输出结构固定为以下 5 个部分，并按此顺序输出：
+   - 数据总览
+   - 状态分布
+   - 来源分布
+   - 重点社团
+   - 优先处理项
+5. 每个部分都应使用自然语言概括，必要时可结合工具返回的计数做简短条目化说明。
+6. 如果工具调用失败或返回错误，直接说明失败原因，不要继续生成概览。`;
+
 /** 内置斜杠命令列表 */
 const commandList: SlashCommand[] = [
   {
@@ -141,6 +156,16 @@ const commandList: SlashCommand[] = [
     usage: "/quit",
     description: "Exit RJ.",
     handler: () => ({ type: "quit" }),
+  },
+  {
+    name: "/overwrite",
+    usage: "/overwrite",
+    description: "Generate an AI overview from the local RJ database (not file overwrite).",
+    handler: () => ({
+      type: "command-chat",
+      displayText: "/overwrite",
+      promptText: buildOverwritePrompt(),
+    }),
   },
   {
     name: "/workMatch",
