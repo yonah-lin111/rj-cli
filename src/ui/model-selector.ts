@@ -7,6 +7,11 @@ import { formatContextWindow, type RJModelConfig } from "../core/config.ts";
 import { shouldIgnoreImeIntermediate } from "../utils/input-filter.ts";
 import { editorTheme, theme } from "./theme.ts";
 
+/** 模型选择器项，额外挂载原始模型数据 */
+interface ModelSelectItem extends SelectItem {
+  model: RJModelConfig;
+}
+
 export class ModelSelector extends Container implements Focusable {
   private search = new Input();
   private list: SelectList;
@@ -23,19 +28,23 @@ export class ModelSelector extends Container implements Focusable {
   ) {
     super();
 
-    const items = models.map((model) => ({
-      value: model.id,
+    const items: ModelSelectItem[] = models.map((model) => ({
+      value: model.name,
       label: model.name,
       description: `${formatContextWindow(model.contextWindow)} context · ${model.outputLimit} output${model.id === currentModelId ? " · current" : ""}`,
+      model,
     }));
     this.list = new SelectList(items, 10, editorTheme.selectList, { minPrimaryColumnWidth: 24, maxPrimaryColumnWidth: 36 });
 
     this.search.setValue(initialSearch);
     this.search.onSubmit = () => this.selectCurrent();
-    this.list.onSelect = (item) => onSelect(item.value);
+    this.list.onSelect = (item) => {
+      const modelItem = this.asModelItem(item);
+      if (modelItem) onSelect(modelItem.model.id);
+    };
     this.list.onCancel = onCancel;
     this.list.onSelectionChange = (item) => this.updateDetails(item);
-    this.list.setSelectedIndex(Math.max(0, items.findIndex((item) => item.value === currentModelId)));
+    this.list.setSelectedIndex(Math.max(0, items.findIndex((item) => item.model.id === currentModelId)));
     this.list.setFilter(initialSearch);
 
     this.addChild(new Text(theme.bold("Select model"), 1, 0));
@@ -81,7 +90,14 @@ export class ModelSelector extends Container implements Focusable {
     if (item) this.list.onSelect?.(item);
   }
 
+  /** 将列表项收窄为带模型数据的类型 */
+  private asModelItem(item: SelectItem | null): ModelSelectItem | null {
+    if (!item || !("model" in item)) return null;
+    return item as ModelSelectItem;
+  }
+
   private updateDetails(item: SelectItem | null): void {
-    this.details.setText(item ? theme.dim(`Model ID: ${item.value}`) : theme.dim("No matching models"));
+    const modelItem = this.asModelItem(item);
+    this.details.setText(modelItem ? theme.dim(`Model ID: ${modelItem.model.id}`) : theme.dim("No matching models"));
   }
 }

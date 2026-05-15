@@ -7,12 +7,17 @@ import type { SessionRecord } from "../core/session.ts";
 import { shouldIgnoreImeIntermediate } from "../utils/input-filter.ts";
 import { editorTheme, theme } from "./theme.ts";
 
+/** 会话选择器项，额外挂载原始会话数据 */
+interface SessionSelectItem extends SelectItem {
+  session: SessionRecord;
+}
+
 /** 会话选择器组件，参考 ModelSelector 实现 */
 export class SessionSelector extends Container implements Focusable {
   private search = new Input();
   private list: SelectList;
   private details = new Text();
-  private items: (SelectItem & { session: SessionRecord })[];
+  private items: SessionSelectItem[];
   private lastNavTime = 0;
 
   focused = false;
@@ -25,7 +30,7 @@ export class SessionSelector extends Container implements Focusable {
     super();
 
     this.items = sessions.map((s) => ({
-      value: s.id,
+      value: formatTitle(s.title),
       label: formatTitle(s.title),
       description: formatDate(s.updatedAt),
       session: s,
@@ -40,8 +45,8 @@ export class SessionSelector extends Container implements Focusable {
 
     this.search.onSubmit = () => this.selectCurrent();
     this.list.onSelect = (item) => {
-      const found = this.items.find((i) => i.value === item.value);
-      if (found) onSelect(found.session);
+      const sessionItem = this.asSessionItem(item);
+      if (sessionItem) onSelect(sessionItem.session);
     };
     this.list.onCancel = onCancel;
     this.list.onSelectionChange = (item) => this.updateDetails(item);
@@ -97,9 +102,16 @@ export class SessionSelector extends Container implements Focusable {
     if (item) this.list.onSelect?.(item);
   }
 
+  /** 将列表项收窄为带会话数据的类型 */
+  private asSessionItem(item: SelectItem | null): SessionSelectItem | null {
+    if (!item || !("session" in item)) return null;
+    return item as SessionSelectItem;
+  }
+
   private updateDetails(item: SelectItem | null): void {
+    const sessionItem = this.asSessionItem(item);
     this.details.setText(
-      item ? theme.dim(`Session ID: ${item.value}`) : theme.dim("No sessions found"),
+      sessionItem ? theme.dim(`Session ID: ${sessionItem.session.id}`) : theme.dim("No sessions found"),
     );
   }
 }
