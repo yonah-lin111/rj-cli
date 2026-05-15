@@ -1,19 +1,11 @@
 import {
   Container, Input, SelectList, Spacer, Text,
-  decodeKittyPrintable,
   getKeybindings,
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
 import type { SessionRecord } from "../core/session.ts";
+import { shouldIgnoreImeIntermediate } from "../utils/input-filter.ts";
 import { editorTheme, theme } from "./theme.ts";
-
-const isAsciiTextInput = (keyData: string): boolean => {
-  return keyData.length > 0 && /^[\u0020-\u007e]+$/.test(keyData);
-};
-
-const isNonAsciiPrintable = (value: string | undefined): boolean => {
-  return Boolean(value && /[^\u0000-\u00ff]/u.test(value));
-};
 
 /** 会话选择器组件，参考 ModelSelector 实现 */
 export class SessionSelector extends Container implements Focusable {
@@ -85,11 +77,7 @@ export class SessionSelector extends Container implements Focusable {
       return;
     }
 
-    const kittyPrintable = decodeKittyPrintable(keyData);
-    if (kittyPrintable !== undefined && !isNonAsciiPrintable(kittyPrintable)) {
-      return;
-    }
-    if (kittyPrintable === undefined && isAsciiTextInput(keyData)) {
+    if (shouldIgnoreImeIntermediate(keyData)) {
       return;
     }
 

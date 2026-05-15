@@ -4,6 +4,7 @@ import {
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
 import type { AskQuestion } from "../tools/base/ask.ts";
+import { shouldIgnoreImeIntermediate } from "../utils/input-filter.ts";
 import { editorTheme, theme } from "./theme.ts";
 
 /**
@@ -112,6 +113,11 @@ export class AskPrompt extends Container implements Focusable {
         }
         return;
       }
+
+      if (shouldIgnoreImeIntermediate(keyData)) {
+        return;
+      }
+
       this.customInput.handleInput(keyData);
       this.rebuildChildren();
       return;

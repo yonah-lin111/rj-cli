@@ -4,9 +4,9 @@ import {
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
 import { formatContextWindow, type RJModelConfig } from "../core/config.ts";
+import { shouldIgnoreImeIntermediate } from "../utils/input-filter.ts";
 import { editorTheme, theme } from "./theme.ts";
 
-/** 模型选择器组件 */
 export class ModelSelector extends Container implements Focusable {
   private search = new Input();
   private list: SelectList;
@@ -60,6 +60,11 @@ export class ModelSelector extends Container implements Focusable {
       this.list.handleInput(keyData);
       return;
     }
+
+    if (shouldIgnoreImeIntermediate(keyData)) {
+      return;
+    }
+
     this.search.handleInput(keyData);
     this.list.setFilter(this.search.getValue());
     this.updateDetails(this.list.getSelectedItem());

@@ -1,9 +1,9 @@
 import {
   Container, Input, SelectList, Spacer, Text,
-  decodeKittyPrintable,
   getKeybindings,
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
+import { shouldIgnoreImeIntermediate } from "../utils/input-filter.ts";
 import { editorTheme, theme } from "./theme.ts";
 import type { ResourceMatchSelection } from "../tools/rj-server/resource-match.ts";
 
@@ -11,19 +11,6 @@ const MATCH_SCOPE_ITEMS: SelectItem[] = [
   { value: "all", label: "Yes", description: "Check all pending local works" },
   { value: "single", label: "No", description: "Check one RJ code" },
 ];
-
-const isAsciiTextInput = (keyData: string): boolean => {
-  return keyData.length > 0 && /^[\u0020-\u007e]+$/.test(keyData);
-};
-
-const isNonAsciiPrintable = (value: string | undefined): boolean => {
-  return Boolean(value && /[^\u0000-\u00ff]/u.test(value));
-};
-
-const shouldIgnoreImeIntermediate = (keyData: string): boolean => {
-  const kittyPrintable = decodeKittyPrintable(keyData);
-  return kittyPrintable !== undefined && !isNonAsciiPrintable(kittyPrintable);
-};
 
 export class ResourceMatchSelector extends Container implements Focusable {
   private scopeList: SelectList;
