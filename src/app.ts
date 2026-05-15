@@ -1175,14 +1175,16 @@ export class RJApp {
   }
 
   private showModelSelector(initialSearch = ""): void {
-    const provider = getProvider(this.config, this.state.provider);
     const selector = new ModelSelector(
-      provider.models,
+      this.config.providers,
+      this.state.provider,
       this.state.model,
-      (modelId) => {
+      (providerId, modelId) => {
+        const provider = getProvider(this.config, providerId);
+        const model = getModel(provider, modelId);
         this.closeModelSelector();
-        this.setModel(modelId);
-        this.showPrompt(`Model set to ${getModel(provider, modelId).name}`);
+        this.setModel(providerId, modelId);
+        this.showPrompt(`Model set to ${provider.name} / ${model.name}`);
         this.requestRender();
       },
       () => {
@@ -1552,8 +1554,8 @@ export class RJApp {
     ));
   }
 
-  private setModel(modelId: string): void {
-    const provider = getProvider(this.config, this.state.provider);
+  private setModel(providerId: string, modelId: string): void {
+    const provider = getProvider(this.config, providerId);
     const model = getModel(provider, modelId);
     this.config = saveDefaultModel(this.config, provider.id, model.id);
     this.state.provider = provider.id;
@@ -1562,6 +1564,7 @@ export class RJApp {
     this.state.contextDisplay = formatContextWindow(model.contextWindow);
     this.state.contextWindow = model.contextWindow;
     this.state.outputLimit = model.outputLimit;
+    this.state.availableModels = provider.models.map((item) => item.id);
     this.updateContextUsage();
   }
 

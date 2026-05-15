@@ -3,13 +3,14 @@ import {
   getKeybindings,
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
-import { formatContextWindow, type RJModelConfig } from "../core/config.ts";
+import { formatContextWindow, type RJProviderConfig } from "../core/config.ts";
 import { shouldIgnoreImeIntermediate } from "../utils/input-filter.ts";
 import { editorTheme, theme } from "./theme.ts";
 
-/** 模型选择器项，额外挂载原始模型数据 */
+/** 模型选择器项，额外挂载 provider 与模型数据 */
 interface ModelSelectItem extends SelectItem {
-  model: RJModelConfig;
+  provider: RJProviderConfig;
+  model: RJProviderConfig["models"][number];
 }
 
 export class ModelSelector extends Container implements Focusable {
@@ -20,31 +21,39 @@ export class ModelSelector extends Container implements Focusable {
   focused = false;
 
   constructor(
-    models: RJModelConfig[],
+    providers: RJProviderConfig[],
+    currentProviderId: string,
     currentModelId: string,
-    onSelect: (modelId: string) => void,
+    onSelect: (providerId: string, modelId: string) => void,
     onCancel: () => void,
     initialSearch = "",
   ) {
     super();
 
-    const items: ModelSelectItem[] = models.map((model) => ({
-      value: model.name,
-      label: model.name,
-      description: `${formatContextWindow(model.contextWindow)} context · ${model.outputLimit} output${model.id === currentModelId ? " · current" : ""}`,
-      model,
-    }));
+    const items: ModelSelectItem[] = providers.flatMap((provider) =>
+      provider.models.map((model) => ({
+        value: `${provider.name} ${model.name}`,
+        label: model.name,
+        description:
+          `${provider.name} · ${formatContextWindow(model.contextWindow)} context · ${model.outputLimit} output` +
+          `${provider.id === currentProviderId && model.id === currentModelId ? " · current" : ""}`,
+        provider,
+        model,
+      })),
+    );
     this.list = new SelectList(items, 10, editorTheme.selectList, { minPrimaryColumnWidth: 24, maxPrimaryColumnWidth: 36 });
 
     this.search.setValue(initialSearch);
     this.search.onSubmit = () => this.selectCurrent();
     this.list.onSelect = (item) => {
       const modelItem = this.asModelItem(item);
-      if (modelItem) onSelect(modelItem.model.id);
+      if (modelItem) onSelect(modelItem.provider.id, modelItem.model.id);
     };
     this.list.onCancel = onCancel;
     this.list.onSelectionChange = (item) => this.updateDetails(item);
-    this.list.setSelectedIndex(Math.max(0, items.findIndex((item) => item.model.id === currentModelId)));
+    this.list.setSelectedIndex(
+      Math.max(0, items.findIndex((item) => item.provider.id === currentProviderId && item.model.id === currentModelId)),
+    );
     this.list.setFilter(initialSearch);
 
     this.addChild(new Text(theme.bold("Select model"), 1, 0));
@@ -90,14 +99,18 @@ export class ModelSelector extends Container implements Focusable {
     if (item) this.list.onSelect?.(item);
   }
 
-  /** 将列表项收窄为带模型数据的类型 */
+  /** 将列表项收窄为带 provider 与模型数据的类型 */
   private asModelItem(item: SelectItem | null): ModelSelectItem | null {
-    if (!item || !("model" in item)) return null;
+    if (!item || !("model" in item) || !("provider" in item)) return null;
     return item as ModelSelectItem;
   }
 
   private updateDetails(item: SelectItem | null): void {
     const modelItem = this.asModelItem(item);
-    this.details.setText(modelItem ? theme.dim(`Model ID: ${modelItem.model.id}`) : theme.dim("No matching models"));
+    this.details.setText(
+      modelItem
+        ? theme.dim(`Provider: ${modelItem.provider.name} · Model ID: ${modelItem.model.id}`)
+        : theme.dim("No matching models"),
+    );
   }
 }

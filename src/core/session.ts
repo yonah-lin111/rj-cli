@@ -72,9 +72,12 @@ export const generateSessionTitle = async (
   model: string,
   userText: string,
 ): Promise<string | null> => {
-  if (!provider.baseURL || !provider.apiKey) return null;
+  if (!provider.baseURL || (!provider.apiKey && !provider.apiKeyOptional)) return null;
   try {
-    const client = new OpenAI({ baseURL: provider.baseURL, apiKey: provider.apiKey });
+    const client = new OpenAI({
+      baseURL: provider.baseURL,
+      apiKey: provider.apiKey ?? "ollama",
+    });
     const response = await client.chat.completions.create({
       model,
       max_tokens: 30,

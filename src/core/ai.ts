@@ -146,9 +146,12 @@ const buildToolResultMessage = (result: ToolResult): ChatHistoryMessage => ({
 export const streamChat = async (options: StreamChatOptions): Promise<void> => {
   const { provider, model, maxTokens, tools, signal, onTurn, onDelta, onToolCalls, onHistoryMessage } = options;
   if (!provider.baseURL) throw new Error(`Provider ${provider.name} is missing baseURL.`);
-  if (!provider.apiKey) throw new Error(`Provider ${provider.name} is missing apiKey.`);
+  if (!provider.apiKey && !provider.apiKeyOptional) throw new Error(`Provider ${provider.name} is missing apiKey.`);
 
-  const client = new OpenAI({ baseURL: provider.baseURL, apiKey: provider.apiKey });
+  const client = new OpenAI({
+    baseURL: provider.baseURL,
+    apiKey: provider.apiKey ?? "ollama",
+  });
   const history: ChatHistoryMessage[] = [...options.messages];
 
   for (;;) {

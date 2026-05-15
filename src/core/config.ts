@@ -24,6 +24,7 @@ export interface RJProviderConfig {
   npm?: string;
   baseURL?: string;
   apiKey?: string;
+  apiKeyOptional?: boolean;
   models: RJModelConfig[];
 }
 
@@ -164,6 +165,7 @@ const parseProvider = (value: unknown): RJProviderConfig | null => {
     npm: readString(record, "npm"),
     baseURL: readString(record, "baseURL"),
     apiKey: readString(record, "apiKey"),
+    apiKeyOptional: record.apiKeyOptional === true,
     models,
   };
 };
@@ -242,6 +244,7 @@ export const saveDefaultModel = (config: RJConfig, providerId: string, modelId: 
     defaultProvider: updated.defaultProvider,
     defaultModel: updated.defaultModel,
     providers: updated.providers,
+    fileReading: updated.fileReading,
     subagents: updated.subagents,
   };
   mkdirSync(dirname(updated.configPath), { recursive: true });
