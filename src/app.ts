@@ -10,8 +10,8 @@ import {
 import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
-import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema } from "./core/ai.ts";
-import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool, matchMegaResources, matchAsmroOneResources, type ResourceMatchResult, type ResourceMatchSelection } from "./tools/rj-server/index.ts";
+import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema, matchMegaResourcesSchema, matchAsmroOneResourcesSchema } from "./core/ai.ts";
+import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool, matchMegaResourcesTool, matchAsmroOneResourcesTool, type ResourceMatchSelection } from "./tools/rj-server/index.ts";
 import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
   executeUploadMegaFile,
@@ -424,7 +424,7 @@ export class RJApp {
         model: model.id,
         messages: this.chatHistory(),
         maxTokens: model.outputLimit,
-        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema],
+        tools: [writeFileSchema, editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, rjWorkOpsProcessSchema, matchMegaResourcesSchema, matchAsmroOneResourcesSchema],
         signal: abortController.signal,
         onTurn: () => {
           currentSegment = { text: "" };
@@ -702,6 +702,18 @@ export class RJApp {
                 entry.resultText = resultText;
               } else if (call.name === "rank_remove_circle") {
                 const result = rankRemoveCircleTool(args as unknown as Parameters<typeof rankRemoveCircleTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "match_mega_resources") {
+                const result = matchMegaResourcesTool(args as unknown as Parameters<typeof matchMegaResourcesTool>[0]);
+                resultText = result.content;
+                isError = result.isError;
+                entry.resultLabel = result.resultLabel;
+                entry.resultText = resultText;
+              } else if (call.name === "match_asmrone_resources") {
+                const result = await matchAsmroOneResourcesTool(args as unknown as Parameters<typeof matchAsmroOneResourcesTool>[0]);
                 resultText = result.content;
                 isError = result.isError;
                 entry.resultLabel = result.resultLabel;
@@ -1284,83 +1296,22 @@ export class RJApp {
     mode: "mega" | "asmrone",
     selection: ResourceMatchSelection,
   ): Promise<void> {
-    const displayText = mode === "mega"
+    const isMega = mode === "mega";
+    const displayText = isMega
       ? selection.matchAll ? "/matchMega -All" : `/matchMega -RJ [${selection.rjCode}]`
       : selection.matchAll ? "/matchASMROne -All" : `/matchASMROne -RJ [${selection.rjCode}]`;
-    this.addMessage("command", displayText, "command");
+    const toolName = isMega ? "match_mega_resources" : "match_asmrone_resources";
+    const argsText = selection.matchAll
+      ? "{\"match_all\":true}"
+      : `{\"match_all\":false,\"rj_code\":${JSON.stringify(selection.rjCode)}}`;
+    const title = isMega ? "Mega 资源匹配结果" : "ASMR.ONE 资源匹配结果";
 
-    try {
-      const result = mode === "mega"
-        ? matchMegaResources(selection)
-        : await matchAsmroOneResources(selection);
-      this.addMessage("system", this.formatResourceMatchResult(result), "result");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.addMessage("error", message, "error");
-    }
-    this.requestRender();
-  }
-
-  private formatResourceMatchResult(result: ResourceMatchResult): string {
-    if (result.message && result.total === 0) {
-      return result.message;
-    }
-
-    const title = result.mode === "mega" ? "Mega 资源匹配结果" : "ASMR.ONE 资源匹配结果";
-    const summary = [
-      `模式：${result.total === 1 && !result.items[0]?.message?.startsWith("works:") && !result.items[0]?.message?.startsWith("MEGA:") ? "单个 RJ" : result.total <= 1 && !result.items[0] ? "批量" : (result.total === 1 && !result.items[0]?.exists && !result.message ? "单个 RJ" : undefined)}`,
-    ];
-    const modeText = result.total === 1 && !(result.message === "没有符合条件的任务") ? "单个 RJ" : "批量";
-    const lines = [
-      title,
-      `模式：${modeText}`,
-      `检查总数：${result.total}`,
-      `存在：${result.matched}`,
-      `不存在：${result.unmatched}`,
-      `失败：${result.errors}`,
-    ];
-
-    if (result.message && result.total > 0) {
-      lines.push(`说明：${result.message}`);
-    }
-
-    const matched = result.items.filter((item) => item.exists);
-    const unmatched = result.items.filter((item) => !item.exists && !item.message);
-    const failed = result.items.filter((item) => !item.exists && Boolean(item.message));
-
-    if (result.total === 1) {
-      const item = result.items[0];
-      if (!item) return lines.join("\n");
-      lines.push("", `RJ：${item.rjCode}`, `结果：${item.exists ? "存在" : item.message ? "失败" : "不存在"}`);
-      lines.push(`标题：${item.title ?? "-"}`);
-      lines.push(`社团：${item.circle ?? "-"}`);
-      if (item.message) lines.push(`补充：${item.message}`);
-      return lines.join("\n");
-    }
-
-    if (matched.length > 0) {
-      lines.push("", "命中列表:");
-      for (const item of matched) {
-        const suffix = item.message ? ` · ${item.message}` : "";
-        lines.push(`- ${item.rjCode} · ${item.title ?? "-"} · ${item.circle ?? "-"}${suffix}`);
-      }
-    }
-
-    if (unmatched.length > 0) {
-      lines.push("", "未命中 RJ:");
-      for (const item of unmatched) {
-        lines.push(`- ${item.rjCode}`);
-      }
-    }
-
-    if (failed.length > 0) {
-      lines.push("", "失败 RJ:");
-      for (const item of failed) {
-        lines.push(`- ${item.rjCode} · ${item.message}`);
-      }
-    }
-
-    return lines.join("\n");
+    await this.submitChat({
+      kind: "command",
+      displayText,
+      promptText: `请调用 ${toolName} 工具检查资源是否存在。\n\n要求：\n1. 只调用一次 ${toolName}，参数使用 ${argsText}\n2. 如果工具返回错误，直接输出错误信息\n3. 如果返回 message 且 total=0，直接输出该 message\n4. 否则输出结果时使用以下结构：\n   - 第一行输出标题：${title}\n   - 接着输出摘要：检查总数、存在、不存在、失败\n   - 单个 RJ 时输出：RJ、结果、标题、社团、补充说明\n   - 批量时输出命中列表、未命中 RJ、失败 RJ\n5. 不要输出思考过程，不要输出 JSON 原文`,
+      label: "command",
+    });
   }
 
   private async handleRankSelection(selection: RankSelection): Promise<void> {

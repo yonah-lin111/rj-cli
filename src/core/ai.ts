@@ -1076,6 +1076,40 @@ export const rjWorkOpsProcessSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+export const matchMegaResourcesSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "match_mega_resources",
+    description: "Check whether resources exist in Mega. Supports checking all pending local works or a single RJ code.",
+    parameters: {
+      type: "object",
+      properties: {
+        match_all: { type: "boolean", description: "Whether to check all pending works. Defaults to true." },
+        rj_code: { type: "string", description: "RJ code to check when match_all is false." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const matchAsmroOneResourcesSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "match_asmrone_resources",
+    description: "Check whether resources exist in ASMR.ONE. Supports checking all pending local works or a single RJ code.",
+    parameters: {
+      type: "object",
+      properties: {
+        match_all: { type: "boolean", description: "Whether to check all pending works. Defaults to true." },
+        rj_code: { type: "string", description: "RJ code to check when match_all is false." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
 /** bash tool 的 OpenAI schema */
 export const bashToolSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",

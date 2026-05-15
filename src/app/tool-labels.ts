@@ -24,5 +24,7 @@ export const getToolCallLabel = (callName: string, args: Record<string, unknown>
   if (callName === "circle_add") return `Add Circle ${args.name ?? ""}`;
   if (callName === "circle_remove") return `Remove Circle ${args.name ?? ""}`;
   if (callName === "circle_check_exists") return "Check Circle Exists";
+  if (callName === "match_mega_resources") return args.match_all === false ? `Match Mega ${args.rj_code ?? ""}` : "Match Mega All";
+  if (callName === "match_asmrone_resources") return args.match_all === false ? `Match ASMROne ${args.rj_code ?? ""}` : "Match ASMROne All";
   return callName;
 };

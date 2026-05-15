@@ -13,6 +13,56 @@ export interface RjServerToolResult {
 export type { ResourceMatchSelection, ResourceMatchResult };
 export { matchMegaResources, matchAsmroOneResources };
 
+export interface ResourceMatchToolArgs {
+  match_all?: boolean;
+  rj_code?: string;
+}
+
+const parseResourceMatchSelection = (args: ResourceMatchToolArgs): ResourceMatchSelection => {
+  if (args.match_all === false) {
+    const rjCode = args.rj_code?.trim();
+    if (!rjCode) throw new Error("rj_code 不能为空");
+    return { matchAll: false, rjCode };
+  }
+  return { matchAll: true };
+};
+
+export const matchMegaResourcesTool = (args: ResourceMatchToolArgs): RjServerToolResult => {
+  try {
+    const selection = parseResourceMatchSelection(args);
+    const result = matchMegaResources(selection);
+    return {
+      content: JSON.stringify(result, null, 2),
+      resultLabel: result.message && result.total === 0 ? result.message : `Mega 匹配 ${result.total} 条`,
+      isError: false,
+    };
+  } catch (err) {
+    return {
+      content: `Mega 资源匹配失败: ${err instanceof Error ? err.message : String(err)}`,
+      resultLabel: "error",
+      isError: true,
+    };
+  }
+};
+
+export const matchAsmroOneResourcesTool = async (args: ResourceMatchToolArgs): Promise<RjServerToolResult> => {
+  try {
+    const selection = parseResourceMatchSelection(args);
+    const result = await matchAsmroOneResources(selection);
+    return {
+      content: JSON.stringify(result, null, 2),
+      resultLabel: result.message && result.total === 0 ? result.message : `ASMR.ONE 匹配 ${result.total} 条`,
+      isError: false,
+    };
+  } catch (err) {
+    return {
+      content: `ASMR.ONE 资源匹配失败: ${err instanceof Error ? err.message : String(err)}`,
+      resultLabel: "error",
+      isError: true,
+    };
+  }
+};
+
 // ── 排行榜 ──────────────────────────────────────────────────────────────────
 
 export interface RankingArgs {

@@ -1,7 +1,7 @@
 import {
   Container, Input, SelectList, Spacer, Text,
   decodeKittyPrintable,
-  getKeybindings, matchesKey,
+  getKeybindings,
   type Focusable, type SelectItem,
 } from "@mariozechner/pi-tui";
 import { editorTheme, theme } from "./theme.ts";
@@ -20,6 +20,11 @@ const isNonAsciiPrintable = (value: string | undefined): boolean => {
   return Boolean(value && /[^\u0000-\u00ff]/u.test(value));
 };
 
+const shouldIgnoreImeIntermediate = (keyData: string): boolean => {
+  const kittyPrintable = decodeKittyPrintable(keyData);
+  return kittyPrintable !== undefined && !isNonAsciiPrintable(kittyPrintable);
+};
+
 export class ResourceMatchSelector extends Container implements Focusable {
   private scopeList: SelectList;
   private input = new Input();
@@ -27,8 +32,8 @@ export class ResourceMatchSelector extends Container implements Focusable {
   private hintText = new Text("", 1, 0);
   private detailText = new Text("", 1, 0);
   private errorText = new Text("", 1, 0);
+  private inlineInputLabel = new Text("", 1, 0);
   private errorMessage = "";
-  private tabIndex = 0;
   private lastNavTime = 0;
 
   focused = false;
@@ -55,14 +60,6 @@ export class ResourceMatchSelector extends Container implements Focusable {
       this.onCancel();
       return;
     }
-    if (matchesKey(keyData, "tab") || keyData === "\t") {
-      this.switchTab(1);
-      return;
-    }
-    if (matchesKey(keyData, "shift+tab") || keyData === "\x1b[Z") {
-      this.switchTab(-1);
-      return;
-    }
     if (kb.matches(keyData, "tui.select.confirm")) {
       this.submit();
       return;
@@ -71,22 +68,16 @@ export class ResourceMatchSelector extends Container implements Focusable {
       const now = Date.now();
       if (now - this.lastNavTime < 120) return;
       this.lastNavTime = now;
-      if (this.tabIndex === 0) {
-        this.scopeList.handleInput(keyData);
-      }
+      this.scopeList.handleInput(keyData);
       this.renderPanel();
       return;
     }
 
-    if (this.tabIndex !== 1 || this.isMatchAll()) {
+    if (this.isMatchAll()) {
       return;
     }
 
-    const kittyPrintable = decodeKittyPrintable(keyData);
-    if (kittyPrintable !== undefined && !isNonAsciiPrintable(kittyPrintable)) {
-      return;
-    }
-    if (kittyPrintable === undefined && isAsciiTextInput(keyData)) {
+    if (shouldIgnoreImeIntermediate(keyData)) {
       return;
     }
 
@@ -99,16 +90,6 @@ export class ResourceMatchSelector extends Container implements Focusable {
     super.invalidate();
     this.scopeList.invalidate();
     this.input.invalidate();
-  }
-
-  private switchTab(direction: 1 | -1): void {
-    if (this.isMatchAll()) {
-      this.tabIndex = 0;
-    } else {
-      this.tabIndex = this.tabIndex === 0 && direction === 1 ? 1 : 0;
-    }
-    this.clearError();
-    this.renderPanel();
   }
 
   private isMatchAll(): boolean {
@@ -139,29 +120,24 @@ export class ResourceMatchSelector extends Container implements Focusable {
     this.errorText.setText("");
   }
 
-  private sectionTitle(index: number, label: string): string {
-    return index === this.tabIndex ? theme.askLabel(theme.bold(`› ${label}`)) : theme.dim(`  ${label}`);
-  }
-
   private renderPanel(): void {
     const matchAll = this.isMatchAll();
     const rjCode = this.currentRjCode();
     this.titleText.setText(theme.bold("Resource Match"));
-    this.hintText.setText(theme.dim(matchAll
-      ? "↑/↓ select  Enter confirm  Esc cancel"
-      : "Tab switch sections  ↑/↓ select  Enter confirm  Esc cancel"));
+    this.hintText.setText(theme.dim("↑/↓ select  Type to input when No is selected  Enter confirm  Esc cancel"));
     this.detailText.setText(theme.dim(matchAll ? "Current: All works" : `Current: Single RJ${rjCode ? ` · ${rjCode}` : ""}`));
+    this.inlineInputLabel.setText(theme.askLabel(theme.bold("› Input RJ code")));
 
     this.clear();
     this.addChild(this.titleText);
     this.addChild(this.hintText);
     this.addChild(new Spacer(1));
-    this.addChild(new Text(this.sectionTitle(0, "All works"), 1, 0));
+    this.addChild(new Text(theme.askLabel(theme.bold("› All works")), 1, 0));
     this.addChild(this.scopeList);
 
     if (!matchAll) {
       this.addChild(new Spacer(1));
-      this.addChild(new Text(this.sectionTitle(1, "RJ code"), 1, 0));
+      this.addChild(this.inlineInputLabel);
       this.addChild(this.input);
     }
 
