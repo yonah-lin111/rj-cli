@@ -29,8 +29,8 @@ import { headerText, subagentHeaderText } from "./ui/header.ts";
 import { ModelSelector } from "./ui/model-selector.ts";
 import { RankSelector, type RankSelection } from "./ui/rank-selector.ts";
 import { ResourceMatchSelector } from "./ui/resource-match-selector.ts";
-import { CircleSelector, type CircleSelection, type CircleSelectorItem } from "./ui/circle-selector.ts";
-import { WorksSelector, type WorksSelection, type WorksSelectorItem } from "./ui/works-selector.ts";
+import { CircleSelector, type CircleSelection } from "./ui/circle-selector.ts";
+import { WorksSelector, type WorksSelection } from "./ui/works-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
 import { SubagentSelector } from "./ui/subagent-selector.ts";
 import { AskPrompt } from "./ui/ask-prompt.ts";
@@ -43,22 +43,16 @@ import { generateSessionId, saveSession, listSessions, generateSessionTitle, typ
 import { type SubagentSnapshot } from "./ui/subagent-view.ts";
 import type { RJSubagentConfig } from "./core/config.ts";
 import { buildChatHistory, calculateContextUsage, estimateContextTokens } from "./app/context-usage.ts";
-import { startRankPageServer } from "./app/rank-page.ts";
 import { createSessionSaveArgs, hydrateSessionState } from "./app/session-helpers.ts";
 import { runExploreSubagentWithSnapshot } from "./app/subagent-runner.ts";
 import { getToolCallLabel } from "./app/tool-labels.ts";
-
-type OpenUrlCommand = {
-  command: string;
-  label: string;
-};
-
-type ChatSubmission = {
-  kind: "user" | "command";
-  displayText: string;
-  promptText: string;
-  label?: string;
-};
+import { handleRankSelectionAction } from "./app/rank-actions.ts";
+import { handleResourceMatchSelectionAction } from "./app/resource-match-actions.ts";
+import { handleCircleSelectionAction, loadCircleSelectorItems } from "./app/circle-actions.ts";
+import { handleWorksSelectionAction, loadWorksSelectorItems } from "./app/works-actions.ts";
+import { type ChatSubmission } from "./app/command-prompts.ts";
+import { detectOpenUrlCommand, ensureRankPageServer, type OpenUrlCommand } from "./app/open-url.ts";
+import { findLastQAPair, trimLastSessionQA } from "./app/message-history.ts";
 
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
 export class RJApp {
@@ -126,7 +120,7 @@ export class RJApp {
     this.setupSignals();
     this.tui.start();
 
-    const server = await startRankPageServer();
+    const server = await ensureRankPageServer();
     this.rankPageServer = server;
     const address = server.address() as AddressInfo;
 
@@ -152,13 +146,7 @@ export class RJApp {
   }
 
   private detectOpenUrlCommand(): OpenUrlCommand {
-    if (process.platform === "darwin") {
-      return { command: "open", label: "open" };
-    }
-    if (process.platform === "win32") {
-      return { command: "start", label: "start" };
-    }
-    return { command: "xdg-open", label: "xdg-open" };
+    return detectOpenUrlCommand();
   }
 
   private setupLayout(): void {
@@ -893,32 +881,14 @@ export class RJApp {
   }
 
   private undoLastQA(): void {
-    let assistantIndex = -1;
-    for (let i = this.messages.length - 1; i >= 0; i--) {
-      if (this.messages[i]?.kind === "assistant") {
-        assistantIndex = i;
-        break;
-      }
-    }
-    if (assistantIndex <= 0) {
+    const pair = findLastQAPair(this.messages);
+    if (!pair) {
       this.showPrompt("No QA to undo.");
       return;
     }
 
-    let userIndex = -1;
-    for (let i = assistantIndex - 1; i >= 0; i--) {
-      if (this.messages[i]?.kind === "user") {
-        userIndex = i;
-        break;
-      }
-    }
-    if (userIndex < 0) {
-      this.showPrompt("No QA to undo.");
-      return;
-    }
-
-    const userPrompt = this.messages[userIndex]?.text ?? "";
-    this.messages.splice(userIndex, assistantIndex - userIndex + 1);
+    const userPrompt = this.messages[pair.userIndex]?.text ?? "";
+    this.messages.splice(pair.userIndex, pair.assistantIndex - pair.userIndex + 1);
     this.removeLastSessionQA();
     this.state.messageCount = Math.max(0, this.state.messageCount - 2);
     this.updateContextUsage();
@@ -927,24 +897,7 @@ export class RJApp {
   }
 
   private removeLastSessionQA(): void {
-    let assistantIndex = -1;
-    for (let i = this.sessionMessages.length - 1; i >= 0; i--) {
-      if (this.sessionMessages[i]?.role === "assistant") {
-        assistantIndex = i;
-        break;
-      }
-    }
-    if (assistantIndex < 0) return;
-
-    let userIndex = -1;
-    for (let i = assistantIndex - 1; i >= 0; i--) {
-      if (this.sessionMessages[i]?.role === "user") {
-        userIndex = i;
-        break;
-      }
-    }
-    if (userIndex < 0) return;
-    this.sessionMessages.splice(userIndex);
+    trimLastSessionQA(this.sessionMessages);
   }
 
   private showPrompt(message: string): void {
@@ -1296,90 +1249,41 @@ export class RJApp {
     mode: "mega" | "asmrone",
     selection: ResourceMatchSelection,
   ): Promise<void> {
-    const isMega = mode === "mega";
-    const displayText = isMega
-      ? selection.matchAll ? "/matchMega -All" : `/matchMega -RJ [${selection.rjCode}]`
-      : selection.matchAll ? "/matchASMROne -All" : `/matchASMROne -RJ [${selection.rjCode}]`;
-    const toolName = isMega ? "match_mega_resources" : "match_asmrone_resources";
-    const argsText = selection.matchAll
-      ? "{\"match_all\":true}"
-      : `{\"match_all\":false,\"rj_code\":${JSON.stringify(selection.rjCode)}}`;
-    const title = isMega ? "Mega 资源匹配结果" : "ASMR.ONE 资源匹配结果";
-
-    await this.submitChat({
-      kind: "command",
-      displayText,
-      promptText: `请调用 ${toolName} 工具检查资源是否存在。\n\n要求：\n1. 只调用一次 ${toolName}，参数使用 ${argsText}\n2. 如果工具返回错误，直接输出错误信息\n3. 如果返回 message 且 total=0，直接输出该 message\n4. 否则输出结果时使用以下结构：\n   - 第一行输出标题：${title}\n   - 接着输出摘要：检查总数、存在、不存在、失败\n   - 单个 RJ 时输出：RJ、结果、标题、社团、补充说明\n   - 批量时输出命中列表、未命中 RJ、失败 RJ\n5. 不要输出思考过程，不要输出 JSON 原文`,
-      label: "command",
+    await handleResourceMatchSelectionAction(mode, selection, async (submission) => {
+      await this.submitChat(submission);
     });
   }
 
   private async handleRankSelection(selection: RankSelection): Promise<void> {
-    const periodNames: Record<RankSelection["rankingType"], string> = {
-      "24h": "天",
-      "7d": "周",
-      "30d": "月",
-      year: "年",
-    };
-    const periodFlags: Record<RankSelection["rankingType"], string> = {
-      "24h": "-Day",
-      "7d": "-Week",
-      "30d": "-Month",
-      year: "-Year",
-    };
-
-    if (selection.openPage) {
-      await this.openRankPage(selection);
-      return;
-    }
-
-    await this.submitChat({
-      kind: "command",
-      displayText: `/rank -View only ${periodFlags[selection.rankingType]} -${selection.pageSize} rows`,
-      promptText: `请输出 RJ ${periodNames[selection.rankingType]}排行榜前 ${selection.pageSize} 条：
-1. 调用 rj_get_ranking，参数 ranking_type="${selection.rankingType}"、page=1、page_size=${selection.pageSize}
-2. 将返回 items 渲染为 Markdown 表格，列包含 排名、RJ号、标题、社团、CV、发售日
-3. 只在回复中输出表格，不导出文件`,
-      label: "command",
+    const state = await handleRankSelectionAction(selection, {
+      rankPageServer: this.rankPageServer,
+      openUrlCommand: this.openUrlCommand,
+      detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      submitChat: async (submission) => {
+        await this.submitChat(submission);
+      },
     });
+    if (state.rankPageServer) this.rankPageServer = state.rankPageServer;
+    if (state.openUrlCommand) this.openUrlCommand = state.openUrlCommand;
   }
 
   private async openRankPage(selection: RankSelection): Promise<void> {
-    const server = this.rankPageServer?.listening ? this.rankPageServer : await startRankPageServer();
-    this.rankPageServer = server;
-    const address = server.address() as AddressInfo;
-    const url = `http://127.0.0.1:${address.port}/?ranking_type=${encodeURIComponent(selection.rankingType)}&page_size=${selection.pageSize}`;
-    const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
-    this.openUrlCommand = opener;
-    const periodFlags: Record<RankSelection["rankingType"], string> = {
-      "24h": "-Day",
-      "7d": "-Week",
-      "30d": "-Month",
-      year: "-Year",
-    };
-    await this.submitChat({
-      kind: "command",
-      displayText: `/rank -Open page ${periodFlags[selection.rankingType]} -${selection.pageSize} rows`,
-      promptText: `请使用 bash 工具打开 RJ 排行榜页面，并在命令执行后简短说明页面已打开，支持分页、排行周期切换以及 RJ号/标题/社团/CV 条件查询。
-
-要求：
-1. 当前系统打开命令是 ${opener.command}
-2. 页面地址是 ${url}
-3. 只调用一次 bash 工具打开页面
-4. 命令中必须安全引用 URL，不要拼接未转义的参数
-5. bash 完成后简短回复打开结果`,
-      label: "command",
+    const state = await handleRankSelectionAction({ ...selection, openPage: true }, {
+      rankPageServer: this.rankPageServer,
+      openUrlCommand: this.openUrlCommand,
+      detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      submitChat: async (submission) => {
+        await this.submitChat(submission);
+      },
     });
+    if (state.rankPageServer) this.rankPageServer = state.rankPageServer;
+    if (state.openUrlCommand) this.openUrlCommand = state.openUrlCommand;
   }
 
   private showCircleSelector(): void {
-    let circles: CircleSelectorItem[] = [];
-    const result = queryCircleTool({ page: 1, page_size: 500 });
-    if (result.isError) {
-      this.showPrompt(result.content);
-    } else {
-      const data = JSON.parse(result.content) as { data?: CircleSelectorItem[] };
-      circles = data.data ?? [];
+    const { items, error } = loadCircleSelectorItems();
+    if (error) {
+      this.showPrompt(error);
     }
 
     const selector = new CircleSelector(
@@ -1391,7 +1295,7 @@ export class RJApp {
         this.closeCircleSelector();
         this.requestRender();
       },
-      circles,
+      items,
     );
     this.circleSelector = selector;
     this.refreshChat();
@@ -1404,62 +1308,43 @@ export class RJApp {
   }
 
   private async handleCircleSelection(selection: CircleSelection): Promise<void> {
-    if (selection.outputMode === "page") {
-      await this.openCirclePage();
-      return;
-    }
-
-    if (!selection.circleName) {
-      this.addMessage("system", "当前本地数据库中没有社团记录", "result");
-      this.requestRender();
-      return;
-    }
-
-    await this.submitChat({
-      kind: "command",
-      displayText: `/circle [${selection.circleName}]`,
-      promptText: `请输出社团”${selection.circleName}”的详情和最新发布作品：
-1. 调用 circle_get_detail，参数 name=${selection.circleName}
-2. 调用 circle_get_latest_works，参数 circle_name=${selection.circleName}、limit=10
-3. 输出”社团基本信息”小节：社团名、昵称、链接、备注、创建时间、本地作品数
-4. 输出”DLsite 最新 10 部作品”Markdown 表格：RJ号、标题、发售日、全年龄
-5. 标题非空时渲染为 Markdown 链接（使用 title_url）
-6. 如果 circle_get_latest_works 返回错误或 items 为空，输出”暂无最新作品（可能未设置 circle_url）”
-7. 只输出结果，不导出文件`,
-      label: "command",
+    const state = await handleCircleSelectionAction(selection, {
+      rankPageServer: this.rankPageServer,
+      openUrlCommand: this.openUrlCommand,
+      detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      submitChat: async (submission) => {
+        await this.submitChat(submission);
+      },
+      addMessage: (kind, text, label) => {
+        this.addMessage(kind, text, label);
+      },
+      requestRender: () => this.requestRender(),
     });
+    if (state.rankPageServer) this.rankPageServer = state.rankPageServer;
+    if (state.openUrlCommand) this.openUrlCommand = state.openUrlCommand;
   }
 
   private async openCirclePage(): Promise<void> {
-    const server = this.rankPageServer?.listening ? this.rankPageServer : await startRankPageServer();
-    this.rankPageServer = server;
-    const address = server.address() as AddressInfo;
-    const url = `http://127.0.0.1:${address.port}/circle?page_size=30`;
-    const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
-    this.openUrlCommand = opener;
-    await this.submitChat({
-      kind: "command",
-      displayText: "/circle -Open page",
-      promptText: `请使用 bash 工具打开本地社团管理页面，并在命令执行后简短说明页面已打开，支持社团新增/编辑/删除，以及社团作品查询、添加和移除。
-
-要求：
-1. 当前系统打开命令是 ${opener.command}
-2. 页面地址是 ${url}
-3. 只调用一次 bash 工具打开页面
-4. 命令中必须安全引用 URL，不要拼接未转义的参数
-5. bash 完成后简短回复打开结果`,
-      label: "command",
+    const state = await handleCircleSelectionAction({ outputMode: "page" }, {
+      rankPageServer: this.rankPageServer,
+      openUrlCommand: this.openUrlCommand,
+      detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      submitChat: async (submission) => {
+        await this.submitChat(submission);
+      },
+      addMessage: (kind, text, label) => {
+        this.addMessage(kind, text, label);
+      },
+      requestRender: () => this.requestRender(),
     });
+    if (state.rankPageServer) this.rankPageServer = state.rankPageServer;
+    if (state.openUrlCommand) this.openUrlCommand = state.openUrlCommand;
   }
 
   private showWorksSelector(): void {
-    let circles: WorksSelectorItem[] = [];
-    const result = queryCircleTool({ page: 1, page_size: 500 });
-    if (result.isError) {
-      this.showPrompt(result.content);
-    } else {
-      const data = JSON.parse(result.content) as { data?: WorksSelectorItem[] };
-      circles = data.data ?? [];
+    const { items, error } = loadWorksSelectorItems();
+    if (error) {
+      this.showPrompt(error);
     }
 
     const selector = new WorksSelector(
@@ -1471,7 +1356,7 @@ export class RJApp {
         this.closeWorksSelector();
         this.requestRender();
       },
-      circles,
+      items,
     );
     this.worksSelector = selector;
     this.refreshChat();
@@ -1484,71 +1369,29 @@ export class RJApp {
   }
 
   private async handleWorksSelection(selection: WorksSelection): Promise<void> {
-    if (selection.outputMode === "page") {
-      await this.openWorksPage(selection);
-      return;
-    }
-
-    const filters = ["page=1", "page_size=5"];
-    if (selection.queryPreset === "latest-undownloaded") {
-      filters.push("status=0");
-    }
-    if (selection.circleName) {
-      filters.push(`circle=${JSON.stringify(selection.circleName)}`);
-    }
-
-    const presetText = selection.queryPreset === "latest-undownloaded"
-      ? "最新 5 条未下载作品"
-      : selection.queryPreset === "latest-added"
-        ? "最新 5 条已添加作品"
-        : "全部作品";
-    const presetFlags: Record<WorksSelection["queryPreset"], string> = {
-      all: "-All",
-      "latest-added": "-Latest added",
-      "latest-undownloaded": "-Latest undownloaded",
-    };
-    const circleFlag = selection.circleName ? ` -Circle [${selection.circleName}]` : "";
-    await this.submitChat({
-      kind: "command",
-      displayText: `/works -View only ${presetFlags[selection.queryPreset]}${circleFlag}`,
-      promptText: `请查询本地作品数据并只输出结果表格：
-1. 调用 rj_query，参数 ${filters.join("、")}
-2. 将返回 data 渲染为 Markdown 表格，列至少包含 RJ号、标题、社团、状态、创建时间
-3. 如果标题存在且带有 title_url，则渲染为 Markdown 链接
-4. 不要输出解释、总结或额外文字，本次查询目标是：${presetText}${selection.circleName ? `（社团：${selection.circleName}）` : ""}`,
-      label: "command",
+    const state = await handleWorksSelectionAction(selection, {
+      rankPageServer: this.rankPageServer,
+      openUrlCommand: this.openUrlCommand,
+      detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      submitChat: async (submission) => {
+        await this.submitChat(submission);
+      },
     });
+    if (state.rankPageServer) this.rankPageServer = state.rankPageServer;
+    if (state.openUrlCommand) this.openUrlCommand = state.openUrlCommand;
   }
 
   private async openWorksPage(selection: WorksSelection): Promise<void> {
-    const server = this.rankPageServer?.listening ? this.rankPageServer : await startRankPageServer();
-    this.rankPageServer = server;
-    const address = server.address() as AddressInfo;
-    const params = new URLSearchParams({ page_size: "30" });
-    if (selection.queryPreset !== "all") params.set("preset", selection.queryPreset);
-    if (selection.circleName) params.set("circle", selection.circleName);
-    const url = `http://127.0.0.1:${address.port}/works?${params.toString()}`;
-    const opener = this.openUrlCommand ?? this.detectOpenUrlCommand();
-    this.openUrlCommand = opener;
-    const presetFlags: Record<WorksSelection["queryPreset"], string> = {
-      all: "-All",
-      "latest-added": "-Latest added",
-      "latest-undownloaded": "-Latest undownloaded",
-    };
-    const circleFlag = selection.circleName ? ` -Circle [${selection.circleName}]` : "";
-    await this.submitChat({
-      kind: "command",
-      displayText: `/works -Open page ${presetFlags[selection.queryPreset]}${circleFlag}`,
-      promptText: `请使用 bash 工具打开本地作品管理页面，并在命令执行后简短说明页面已打开，支持分页、预设切换、社团/RJ号/标题筛选，以及查看详情和下载链接。
-
-要求：
-1. 当前系统打开命令是 ${opener.command}
-2. 页面地址是 ${url}
-3. 只调用一次 bash 工具打开页面
-4. 命令中必须安全引用 URL，不要拼接未转义的参数
-5. bash 完成后简短回复打开结果`,
-      label: "command",
+    const state = await handleWorksSelectionAction({ ...selection, outputMode: "page" }, {
+      rankPageServer: this.rankPageServer,
+      openUrlCommand: this.openUrlCommand,
+      detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      submitChat: async (submission) => {
+        await this.submitChat(submission);
+      },
     });
+    if (state.rankPageServer) this.rankPageServer = state.rankPageServer;
+    if (state.openUrlCommand) this.openUrlCommand = state.openUrlCommand;
   }
 
   private showSessionSelector(): void {
