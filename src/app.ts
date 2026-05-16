@@ -53,7 +53,7 @@ import { handleResourceMatchSelectionAction } from "./app/resource-match-actions
 import { handleCircleSelectionAction, loadCircleSelectorItems } from "./app/circle-actions.ts";
 import { handleWorksSelectionAction, loadWorksSelectorItems } from "./app/works-actions.ts";
 import { type ChatSubmission } from "./app/command-prompts.ts";
-import { detectOpenUrlCommand, ensureRankPageServer, type OpenUrlCommand } from "./app/open-url.ts";
+import { detectOpenUrlCommand, ensureRankPageServer, openUrl, type OpenUrlCommand } from "./app/open-url.ts";
 import { findLastQAPair, trimLastSessionQA } from "./app/message-history.ts";
 
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
@@ -1107,25 +1107,18 @@ export class RJApp {
   }
 
   private async openWebUI(): Promise<void> {
-    if (!this.openUrlCommand) {
-      this.showPrompt("Open command is not available.");
-      this.requestRender();
-      return;
-    }
     try {
+      const openUrlCommand = this.openUrlCommand ?? this.detectOpenUrlCommand();
       const server = await ensureRankPageServer(this.rankPageServer);
       this.rankPageServer = server;
+      this.openUrlCommand = openUrlCommand;
       const address = server.address() as AddressInfo;
-      runBash(`nohup ${this.openUrlCommand.command} http://127.0.0.1:${address.port}/rank >/dev/null 2>&1 &`)
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          this.showPrompt(`Failed to open Web UI: ${message}`);
-          this.requestRender();
-        });
-      this.showPrompt(`Opened Web UI: http://127.0.0.1:${address.port}/rank`);
+      const url = `http://127.0.0.1:${address.port}/rank`;
+      await openUrl(url, openUrlCommand);
+      this.showPrompt(`Opened Web UI: ${url}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.showPrompt(`Failed to prepare Web UI: ${message}`);
+      this.showPrompt(`Failed to open Web UI: ${message}`);
     }
     this.requestRender();
   }
@@ -1341,6 +1334,7 @@ export class RJApp {
       rankPageServer: this.rankPageServer,
       openUrlCommand: this.openUrlCommand,
       detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      openUrl,
       submitChat: async (submission) => {
         await this.submitChat(submission);
       },
@@ -1354,6 +1348,7 @@ export class RJApp {
       rankPageServer: this.rankPageServer,
       openUrlCommand: this.openUrlCommand,
       detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      openUrl,
       submitChat: async (submission) => {
         await this.submitChat(submission);
       },
@@ -1395,6 +1390,7 @@ export class RJApp {
       rankPageServer: this.rankPageServer,
       openUrlCommand: this.openUrlCommand,
       detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      openUrl,
       submitChat: async (submission) => {
         await this.submitChat(submission);
       },
@@ -1412,6 +1408,7 @@ export class RJApp {
       rankPageServer: this.rankPageServer,
       openUrlCommand: this.openUrlCommand,
       detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      openUrl,
       submitChat: async (submission) => {
         await this.submitChat(submission);
       },
@@ -1457,6 +1454,7 @@ export class RJApp {
       rankPageServer: this.rankPageServer,
       openUrlCommand: this.openUrlCommand,
       detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      openUrl,
       submitChat: async (submission) => {
         await this.submitChat(submission);
       },
@@ -1470,6 +1468,7 @@ export class RJApp {
       rankPageServer: this.rankPageServer,
       openUrlCommand: this.openUrlCommand,
       detectOpenUrlCommand: () => this.detectOpenUrlCommand(),
+      openUrl,
       submitChat: async (submission) => {
         await this.submitChat(submission);
       },

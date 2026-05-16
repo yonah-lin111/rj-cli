@@ -2,13 +2,14 @@ import { queryCircleTool } from "../tools/rj-server/index.ts";
 import type { WorksSelection, WorksSelectorItem } from "../ui/works-selector.ts";
 import type { OpenUrlCommand } from "./open-url.ts";
 import type { ChatSubmission } from "./command-prompts.ts";
-import { buildOpenWorksPagePrompt, buildWorksCommandPrompt } from "./command-prompts.ts";
+import { buildWorksCommandPrompt } from "./command-prompts.ts";
 import { buildWorksPageUrl, ensureRankPageServer } from "./open-url.ts";
 
 export type WorksActionDeps = {
   rankPageServer?: import("node:http").Server;
   openUrlCommand?: OpenUrlCommand;
   detectOpenUrlCommand: () => OpenUrlCommand;
+  openUrl: (url: string, opener: OpenUrlCommand) => Promise<void>;
   submitChat: (submission: ChatSubmission) => Promise<void>;
 };
 
@@ -39,6 +40,6 @@ export const openWorksPageAction = async (
   const address = rankPageServer.address() as import("node:net").AddressInfo;
   const url = buildWorksPageUrl(address, selection.queryPreset, selection.circleName);
   const openUrlCommand = deps.openUrlCommand ?? deps.detectOpenUrlCommand();
-  await deps.submitChat(buildOpenWorksPagePrompt(selection, openUrlCommand, url));
+  await deps.openUrl(url, openUrlCommand);
   return { rankPageServer, openUrlCommand };
 };

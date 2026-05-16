@@ -2,13 +2,14 @@ import { queryCircleTool } from "../tools/rj-server/index.ts";
 import type { CircleSelection, CircleSelectorItem } from "../ui/circle-selector.ts";
 import type { OpenUrlCommand } from "./open-url.ts";
 import type { ChatSubmission } from "./command-prompts.ts";
-import { buildCircleCommandPrompt, buildOpenCirclePagePrompt } from "./command-prompts.ts";
+import { buildCircleCommandPrompt } from "./command-prompts.ts";
 import { buildCirclePageUrl, ensureRankPageServer } from "./open-url.ts";
 
 export type CircleActionDeps = {
   rankPageServer?: import("node:http").Server;
   openUrlCommand?: OpenUrlCommand;
   detectOpenUrlCommand: () => OpenUrlCommand;
+  openUrl: (url: string, opener: OpenUrlCommand) => Promise<void>;
   submitChat: (submission: ChatSubmission) => Promise<void>;
   addMessage: (kind: "system", text: string, label?: string) => void;
   requestRender: () => void;
@@ -40,12 +41,12 @@ export const handleCircleSelectionAction = async (
 };
 
 export const openCirclePageAction = async (
-  deps: Pick<CircleActionDeps, "rankPageServer" | "openUrlCommand" | "detectOpenUrlCommand" | "submitChat">,
+  deps: Pick<CircleActionDeps, "rankPageServer" | "openUrlCommand" | "detectOpenUrlCommand" | "openUrl">,
 ): Promise<{ rankPageServer: import("node:http").Server; openUrlCommand: OpenUrlCommand }> => {
   const rankPageServer = await ensureRankPageServer(deps.rankPageServer);
   const address = rankPageServer.address() as import("node:net").AddressInfo;
   const url = buildCirclePageUrl(address);
   const openUrlCommand = deps.openUrlCommand ?? deps.detectOpenUrlCommand();
-  await deps.submitChat(buildOpenCirclePagePrompt(openUrlCommand, url));
+  await deps.openUrl(url, openUrlCommand);
   return { rankPageServer, openUrlCommand };
 };
