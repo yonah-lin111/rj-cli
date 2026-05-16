@@ -10,7 +10,7 @@
     "dev": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --import tsx --test test/**/*.test.ts",
-    "build:web": "cd web && pnpm install && pnpm build"
+    "build:web": "pnpm --dir web install && pnpm --dir web build"
   },
   "dependencies": {
     "@mariozechner/pi-tui": "^0.73.0",

@@ -288,20 +288,24 @@ const sendJson = (res: ServerResponse, data: unknown, statusCode = 200): void =>
   res.end(body);
 };
 
+const sendDistHtml = async (res: ServerResponse, fileName: string): Promise<void> => {
+  try {
+    const html = await readFile(join(DIST_DIR, fileName), "utf-8");
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(html);
+  } catch {
+    res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
+    res.end(`Web assets missing: web/dist/${fileName}. Run: pnpm build:web`);
+  }
+};
+
 const sendRankPageHtml = async (res: ServerResponse): Promise<void> => {
   if (IS_DEV) {
     res.writeHead(302, { location: `http://127.0.0.1:${VITE_PORT}/` });
     res.end();
     return;
   }
-  try {
-    const html = await readFile(join(DIST_DIR, "index.html"), "utf-8");
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-    res.end(html);
-  } catch {
-    res.writeHead(503, { "content-type": "text/plain" });
-    res.end("Web assets not built. Run: pnpm build:web");
-  }
+  await sendDistHtml(res, "index.html");
 };
 
 const sendCirclePageHtml = async (res: ServerResponse): Promise<void> => {
@@ -310,14 +314,7 @@ const sendCirclePageHtml = async (res: ServerResponse): Promise<void> => {
     res.end();
     return;
   }
-  try {
-    const html = await readFile(join(DIST_DIR, "circle.html"), "utf-8");
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-    res.end(html);
-  } catch {
-    res.writeHead(503, { "content-type": "text/plain" });
-    res.end("Web assets not built. Run: pnpm build:web");
-  }
+  await sendDistHtml(res, "circle.html");
 };
 
 const sendWorksPageHtml = async (res: ServerResponse): Promise<void> => {
@@ -326,14 +323,7 @@ const sendWorksPageHtml = async (res: ServerResponse): Promise<void> => {
     res.end();
     return;
   }
-  try {
-    const html = await readFile(join(DIST_DIR, "works.html"), "utf-8");
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-    res.end(html);
-  } catch {
-    res.writeHead(503, { "content-type": "text/plain" });
-    res.end("Web assets not built. Run: pnpm build:web");
-  }
+  await sendDistHtml(res, "works.html");
 };
 
 const sendStaticAsset = async (pathname: string, res: ServerResponse): Promise<void> => {
