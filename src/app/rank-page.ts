@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, updateCircleTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, checkRjExistsTool, checkCircleExistsTool, addWorkToCircleTool } from "../tools/rj-server/index.ts";
+import { worksListTool, worksDeleteTool, worksUpdateStatusTool, circleListTool, circleGetTool, updateCircleTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, checkRjExistsTool, checkCircleExistsTool, addWorkToCircleTool, matchMegaResourcesTool, matchAsmroOneResourcesTool } from "../tools/rj-server/index.ts";
+import { previewWorkOps, processWorkOps, type WorkOpsProgressEvent } from "../tools/rj-server/work-ops.ts";
 import type { RankSelection } from "../ui/rank-selector.ts";
 
 const IS_DEV = process.env.RJ_WEB_DEV === "1";
@@ -53,6 +54,10 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
     await sendWorksPageHtml(res);
     return;
   }
+  if (url.pathname === "/work-ops") {
+    await sendWorkOpsPageHtml(res);
+    return;
+  }
   if (!IS_DEV && url.pathname.startsWith("/assets/")) {
     await sendStaticAsset(url.pathname, res);
     return;
@@ -79,6 +84,31 @@ const handleRankPageRequest = async (req: IncomingMessage, res: ServerResponse):
   }
   if (url.pathname === "/api/works/list") {
     sendWorksPageData(url, res);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/works/match/mega") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => matchMegaResourcesTool(body as unknown as Parameters<typeof matchMegaResourcesTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/works/match/asmr-one") {
+    const body = await readJsonBody(req);
+    await sendToolResponse(res, () => matchAsmroOneResourcesTool(body as unknown as Parameters<typeof matchAsmroOneResourcesTool>[0]));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/work-ops/preview") {
+    const body = await readJsonBody(req);
+    try {
+      const result = previewWorkOps(body as unknown as Parameters<typeof previewWorkOps>[0]);
+      sendJson(res, result, result.success ? 200 : 400);
+    } catch (err) {
+      sendJson(res, { success: false, message: err instanceof Error ? err.message : String(err) }, 500);
+    }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/work-ops/process") {
+    const body = await readJsonBody(req);
+    await sendWorkOpsProcessResponse(res, body as unknown as Parameters<typeof processWorkOps>[0]);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/works/delete") {
@@ -278,6 +308,31 @@ const sendToolResponse = async (res: ServerResponse, run: () => Promise<{ conten
   }
 };
 
+const sendWorkOpsProcessResponse = async (
+  res: ServerResponse,
+  args: Parameters<typeof processWorkOps>[0],
+): Promise<void> => {
+  try {
+    const events: WorkOpsProgressEvent[] = [];
+    for await (const event of processWorkOps(args)) {
+      events.push(event);
+    }
+    const hasError = events.some((event) => event.step === "error");
+    sendJson(res, {
+      success: !hasError,
+      events,
+      last_event: events.at(-1) ?? null,
+    }, hasError ? 400 : 200);
+  } catch (err) {
+    sendJson(res, {
+      success: false,
+      events: [],
+      last_event: null,
+      error: err instanceof Error ? err.message : String(err),
+    }, 500);
+  }
+};
+
 const sendJson = (res: ServerResponse, data: unknown, statusCode = 200): void => {
   const body = JSON.stringify(data);
   res.writeHead(statusCode, {
@@ -324,6 +379,15 @@ const sendWorksPageHtml = async (res: ServerResponse): Promise<void> => {
     return;
   }
   await sendDistHtml(res, "works.html");
+};
+
+const sendWorkOpsPageHtml = async (res: ServerResponse): Promise<void> => {
+  if (IS_DEV) {
+    res.writeHead(302, { location: `http://127.0.0.1:${VITE_PORT}/work-ops.html` });
+    res.end();
+    return;
+  }
+  await sendDistHtml(res, "work-ops.html");
 };
 
 const sendStaticAsset = async (pathname: string, res: ServerResponse): Promise<void> => {

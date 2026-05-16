@@ -7,6 +7,10 @@ import type {
   CircleLatestWorksResponse,
   WorksListResponse,
   WorksQueryPreset,
+  CircleAddResponse,
+  ResourceMatchResponse,
+  WorkOpsPreviewResponse,
+  WorkOpsProcessResponse,
 } from "../types";
 
 export async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -103,6 +107,17 @@ export async function fetchCircleLatestWorks(circleName: string, limit = 10): Pr
   return data;
 }
 
+export interface AddCircleParams {
+  name: string;
+  nickname?: string;
+  circle_url?: string;
+  remark?: string;
+}
+
+export async function addCircle(params: AddCircleParams): Promise<CircleAddResponse> {
+  return postJson<CircleAddResponse>("/api/circle/add", params);
+}
+
 export interface WorksListParams {
   preset?: WorksQueryPreset;
   page: number;
@@ -136,6 +151,46 @@ export interface UpdateWorkStatusResponse {
   rj_code: string;
   status: number;
   message?: string;
+}
+
+export interface ResourceMatchParams {
+  match_all?: boolean;
+  rj_code?: string;
+}
+
+export async function matchMegaResources(params: ResourceMatchParams): Promise<ResourceMatchResponse> {
+  return postJson<ResourceMatchResponse>("/api/works/match/mega", params);
+}
+
+export async function matchAsmroOneResources(params: ResourceMatchParams): Promise<ResourceMatchResponse> {
+  return postJson<ResourceMatchResponse>("/api/works/match/asmr-one", params);
+}
+
+export interface WorkOpsPreviewParams {
+  source_path: string;
+  target_format: string;
+  output_base_path?: string;
+  multi_folder?: boolean;
+}
+
+export async function previewWorkOps(params: WorkOpsPreviewParams): Promise<WorkOpsPreviewResponse> {
+  return postJson<WorkOpsPreviewResponse>("/api/work-ops/preview", params);
+}
+
+export interface WorkOpsProcessParams {
+  source_path: string;
+  target_format: string;
+  keep_source: boolean;
+  threads: number;
+  output_base_path: string;
+  force_overwrite?: boolean;
+  multi_folder?: boolean;
+  selected_folders?: string[];
+  cover_image?: string;
+}
+
+export async function runWorkOpsProcess(params: WorkOpsProcessParams): Promise<WorkOpsProcessResponse> {
+  return postJson<WorkOpsProcessResponse>("/api/work-ops/process", params);
 }
 
 export async function updateWorkStatus(rj_code: string, status: number): Promise<UpdateWorkStatusResponse> {

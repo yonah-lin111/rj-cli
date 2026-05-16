@@ -4,6 +4,7 @@ import {
   fetchCircleWorks,
   fetchCircleLatestWorks,
   postJson,
+  addCircle,
 } from "@/lib/api";
 import type {
   CircleItem,
@@ -62,7 +63,7 @@ function getInitialParams() {
   };
 }
 
-type ModalType = "latest-works" | "db-works" | "edit" | null;
+type ModalType = "latest-works" | "db-works" | "edit" | "create" | null;
 
 interface ModalState {
   type: ModalType;
@@ -79,6 +80,14 @@ export default function CirclePage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [circles, setCircles] = useState<CircleItem[]>([]);
+  const [createName, setCreateName] = useState("");
+  const [createNickname, setCreateNickname] = useState("");
+  const [createUrl, setCreateUrl] = useState("");
+  const [createRemark, setCreateRemark] = useState("");
+  const [createStatus, setCreateStatus] = useState<{
+    type: "idle" | "loading" | "error" | "ok";
+    msg?: string;
+  }>({ type: "idle" });
   const [listStatus, setListStatus] = useState<{
     type: "idle" | "loading" | "error" | "ok";
     msg?: string;
@@ -264,6 +273,44 @@ export default function CirclePage() {
 
   const closeModal = () => setModal({ type: null, circleName: "" });
 
+  const handleCreateCircle = async () => {
+    const trimmedName = createName.trim();
+    if (!trimmedName) {
+      setCreateStatus({ type: "error", msg: "Circle name is required" });
+      return;
+    }
+
+    setCreateStatus({ type: "loading", msg: "Creating..." });
+    try {
+      const result = await addCircle({
+        name: trimmedName,
+        nickname: createNickname.trim() || undefined,
+        circle_url: createUrl.trim() || undefined,
+        remark: createRemark.trim() || undefined,
+      });
+      setCreateStatus({
+        type: result.added ? "ok" : "error",
+        msg: result.added
+          ? `Added ${result.name}`
+          : result.exists
+            ? `${result.name} already exists`
+            : `Failed to add ${result.name}`,
+      });
+      if (!result.added) return;
+      setCreateName("");
+      setCreateNickname("");
+      setCreateUrl("");
+      setCreateRemark("");
+      setPage(1);
+      await loadCircles(1, pageSize, currentFilters);
+    } catch (err) {
+      setCreateStatus({
+        type: "error",
+        msg: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
   const handleUpdateCircle = async () => {
     if (!modal.circleName) return;
     setEditStatus({ type: "loading" });
@@ -429,6 +476,16 @@ export default function CirclePage() {
             <Search className="w-4 h-4 mr-1.5" />
             Search
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCreateStatus({ type: "idle" });
+              setModal({ type: "create", circleName: "" });
+            }}
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add Circle
+          </Button>
         </div>
 
         <div className="flex items-center justify-between mb-2">
@@ -579,10 +636,18 @@ export default function CirclePage() {
                   {modal.type === "latest-works" && "Latest Works"}
                   {modal.type === "db-works" && "DB Works"}
                   {modal.type === "edit" && "Edit Circle"}
+                  {modal.type === "create" && "Add Circle"}
                 </h2>
-                <p className="text-sm text-muted-foreground truncate mt-0.5">
-                  {modal.circleName}
-                </p>
+                  {modal.type === "create" && (
+                    <p className="text-sm text-muted-foreground truncate mt-0.5">
+                      Create a new circle record
+                    </p>
+                  )}
+                  {modal.type !== "create" && (
+                    <p className="text-sm text-muted-foreground truncate mt-0.5">
+                      {modal.circleName}
+                    </p>
+                  )}
               </div>
               <button
                 onClick={closeModal}
@@ -594,6 +659,62 @@ export default function CirclePage() {
 
             {/* Modal body */}
             <div className="overflow-y-auto flex-1 p-6">
+              {modal.type === "create" && (
+                <div className="flex flex-col gap-4 max-w-md">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Circle Name
+                    </label>
+                    <Input
+                      value={createName}
+                      onChange={(e) => setCreateName(e.target.value)}
+                      placeholder="Required"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Alias
+                    </label>
+                    <Input
+                      value={createNickname}
+                      onChange={(e) => setCreateNickname(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Circle URL
+                    </label>
+                    <Input
+                      value={createUrl}
+                      onChange={(e) => setCreateUrl(e.target.value)}
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Remark
+                    </label>
+                    <Textarea
+                      value={createRemark}
+                      onChange={(e) => setCreateRemark(e.target.value)}
+                      placeholder="Optional remark"
+                      rows={3}
+                    />
+                  </div>
+                  <p className={`text-sm ${createStatus.type === "error" ? "text-destructive" : createStatus.type === "ok" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                    {createStatus.type === "loading" ? "Creating..." : (createStatus.msg ?? "Fill the form and create a new circle.")}
+                  </p>
+                  <Button
+                    onClick={() => void handleCreateCircle()}
+                    disabled={createStatus.type === "loading"}
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Add Circle
+                  </Button>
+                </div>
+              )}
+
               {/* Latest works */}
               {modal.type === "latest-works" && (
                 <div>

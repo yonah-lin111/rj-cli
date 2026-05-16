@@ -18,6 +18,7 @@ export default defineConfig({
         rank: path.resolve(__dirname, "index.html"),
         circle: path.resolve(__dirname, "circle.html"),
         works: path.resolve(__dirname, "works.html"),
+        workOps: path.resolve(__dirname, "work-ops.html"),
       },
     },
   },

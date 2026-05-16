@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchWorksList, updateWorkStatus } from "@/lib/api";
-import type { DownloadLinksValue, WorkItem, WorksQueryPreset } from "@/types";
+import { fetchWorksList, matchAsmroOneResources, matchMegaResources, updateWorkStatus } from "@/lib/api";
+import type { DownloadLinksValue, ResourceMatchItem, WorkItem, WorksQueryPreset } from "@/types";
 import { PageHeaderNav } from "@/components/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  WandSparkles,
   X,
 } from "lucide-react";
 
@@ -136,6 +137,11 @@ export default function WorksPage() {
   }>({ type: "idle" });
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [modal, setModal] = useState<ModalState>({ type: null, item: null });
+  const [matchStatus, setMatchStatus] = useState<{
+    type: "idle" | "loading" | "error" | "ok";
+    msg?: string;
+  }>({ type: "idle" });
+  const [matchResults, setMatchResults] = useState<ResourceMatchItem[]>([]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -289,6 +295,36 @@ export default function WorksPage() {
   };
 
 
+  const handleMatchResources = async (sourceName: "mega" | "asmr-one") => {
+    const trimmedRjCode = rjCode.trim();
+    if (!trimmedRjCode) {
+      setMatchStatus({ type: "error", msg: "Please enter an RJ code before matching" });
+      setMatchResults([]);
+      return;
+    }
+
+    setMatchStatus({ type: "loading", msg: `Matching ${trimmedRjCode} in ${sourceName}...` });
+    setMatchResults([]);
+    try {
+      const result = sourceName === "mega"
+        ? await matchMegaResources({ rj_code: trimmedRjCode })
+        : await matchAsmroOneResources({ rj_code: trimmedRjCode });
+      const items = Array.isArray(result.items) ? result.items : [];
+      setMatchResults(items);
+      setMatchStatus({
+        type: "ok",
+        msg: result.message ?? (items.length > 0 ? `Matched ${items.length} item(s)` : "No matches found"),
+      });
+      await load(page, pageSize, currentFilters);
+    } catch (err) {
+      setMatchStatus({
+        type: "error",
+        msg: err instanceof Error ? err.message : String(err),
+      });
+      setMatchResults([]);
+    }
+  };
+
   const pages = Math.max(1, Math.ceil(total / Number(pageSize)));
   const modalItem = modal.item;
   const modalDownloadLinksText = modalItem ? formatJson(modalItem.download_links) : "";
@@ -430,6 +466,47 @@ export default function WorksPage() {
           <Button variant="outline" onClick={handleReset}>
             <RotateCcw className="mr-1.5 h-4 w-4" />Reset
           </Button>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-border bg-muted/20 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-card-foreground">Resource Match</h2>
+              <p className={`mt-1 text-sm ${matchStatus.type === "error" ? "text-destructive" : matchStatus.type === "ok" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                {matchStatus.type === "loading" ? "Matching..." : (matchStatus.msg ?? "Enter an RJ code, then run Mega or ASMR.ONE matching.")}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void handleMatchResources("mega")} disabled={matchStatus.type === "loading"}>
+                <WandSparkles className="mr-1.5 h-4 w-4" />Match Mega
+              </Button>
+              <Button variant="outline" onClick={() => void handleMatchResources("asmr-one")} disabled={matchStatus.type === "loading"}>
+                <WandSparkles className="mr-1.5 h-4 w-4" />Match ASMR.ONE
+              </Button>
+              <Button variant="outline" asChild>
+                <a href="/work-ops">Open Work Ops</a>
+              </Button>
+            </div>
+          </div>
+          {matchResults.length > 0 && (
+            <div className="mt-4 grid gap-2">
+              {matchResults.map((item) => (
+                <div key={`${item.rj_code}-${item.source ?? "unknown"}`} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{item.rj_code}</Badge>
+                    {item.source && <Badge variant="secondary">{item.source}</Badge>}
+                    {item.status && <Badge>{item.status}</Badge>}
+                  </div>
+                  <p className="mt-2 text-card-foreground">{item.title ?? "-"}</p>
+                  {item.matched_url && (
+                    <a href={item.matched_url} target="_blank" rel="noreferrer" className="mt-1 inline-flex break-all text-xs text-primary hover:underline">
+                      {item.matched_url}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mb-3 flex items-center justify-between">

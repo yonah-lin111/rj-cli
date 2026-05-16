@@ -23,6 +23,11 @@ const navItems: WebNavItem[] = [
     href: "/works",
     match: (pathname) => pathname === "/works",
   },
+  {
+    label: "Work Ops",
+    href: "/work-ops",
+    match: (pathname) => pathname === "/work-ops",
+  },
 ];
 
 /** 页面顶部导航 */
