@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   Container, Editor, Loader, ProcessTerminal, Spacer, Text, TUI,
+  getKeybindings,
   matchesKey, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS,
 } from "@mariozechner/pi-tui";
+import type { KeybindingsManager as TUIKeybindingsManager } from "@mariozechner/pi-tui";
 import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
@@ -102,6 +104,8 @@ export class RJApp {
   private pendingUndoPrompt?: string;
   private lastEscapeAt = 0;
   private suppressEscapeCancelUntil = 0;
+  private suppressSelectorConfirmUntil = 0;
+  private canConsumeSuppressedSelectorConfirm = false;
   private promptTimer?: NodeJS.Timeout;
   private stopped = false;
   private ignoreNextSigint = false;
@@ -207,6 +211,10 @@ export class RJApp {
       // ctrl+o 打开最近一个 subagent 详情
       if (matchesKey(data, "ctrl+o")) {
         this.openSubagentView();
+        return { consume: true };
+      }
+
+      if (this.shouldSuppressSelectorConfirm(data)) {
         return { consume: true };
       }
 
@@ -323,6 +331,46 @@ export class RJApp {
       clearTimeout(this.ignoreNextCtrlCTimer);
       this.ignoreNextCtrlCTimer = undefined;
     }
+  }
+
+  /** 打开 selector 后，短时吞掉一次残留确认键，避免 VSCode 终端重复消费 Enter。 */
+  private armSelectorConfirmSuppression(): void {
+    this.suppressSelectorConfirmUntil = Date.now() + 120;
+    this.canConsumeSuppressedSelectorConfirm = true;
+  }
+
+  /** 判断当前是否存在会接收统一输入分发的 selector。 */
+  private hasOpenSelector(): boolean {
+    return Boolean(
+      this.modelSelector ||
+      this.rankSelector ||
+      this.resourceMatchSelector ||
+      this.circleSelector ||
+      this.worksSelector ||
+      this.sessionSelector ||
+      this.subagentSelector,
+    );
+  }
+
+  /** 判断是否需要吞掉 selector 打开瞬间残留的确认输入。 */
+  private shouldSuppressSelectorConfirm(data: string): boolean {
+    if (!this.hasOpenSelector()) return false;
+    if (!this.matchesSelectorConfirm(data)) return false;
+    if (!this.canConsumeSuppressedSelectorConfirm) return false;
+    if (Date.now() >= this.suppressSelectorConfirmUntil) return false;
+    this.canConsumeSuppressedSelectorConfirm = false;
+    return true;
+  }
+
+  /** 统一判断当前输入是否命中 selector 确认键。 */
+  private matchesSelectorConfirm(data: string): boolean {
+    const kb = this.getTuiKeybindings();
+    return kb.matches(data, "tui.select.confirm");
+  }
+
+  /** 读取当前 TUI 键位映射，供应用层统一判断 selector 交互。 */
+  private getTuiKeybindings(): TUIKeybindingsManager {
+    return getKeybindings() as TUIKeybindingsManager;
   }
 
   private async handleSubmit(rawText: string): Promise<void> {
@@ -1223,6 +1271,7 @@ export class RJApp {
       initialSearch,
     );
     this.modelSelector = selector;
+    this.armSelectorConfirmSuppression();
     this.refreshChat();
     this.tui.setFocus(selector);
   }
@@ -1244,6 +1293,7 @@ export class RJApp {
       },
     );
     this.rankSelector = selector;
+    this.armSelectorConfirmSuppression();
     this.refreshChat();
     this.tui.setFocus(selector);
   }
@@ -1266,6 +1316,7 @@ export class RJApp {
     );
     this.resourceMatchMode = mode;
     this.resourceMatchSelector = selector;
+    this.armSelectorConfirmSuppression();
     this.refreshChat();
     this.tui.setFocus(selector);
   }
@@ -1329,6 +1380,7 @@ export class RJApp {
       items,
     );
     this.circleSelector = selector;
+    this.armSelectorConfirmSuppression();
     this.refreshChat();
     this.tui.setFocus(selector);
   }
@@ -1390,6 +1442,7 @@ export class RJApp {
       items,
     );
     this.worksSelector = selector;
+    this.armSelectorConfirmSuppression();
     this.refreshChat();
     this.tui.setFocus(selector);
   }
@@ -1445,6 +1498,7 @@ export class RJApp {
       },
     );
     this.sessionSelector = selector;
+    this.armSelectorConfirmSuppression();
     this.refreshChat();
     this.tui.setFocus(selector);
   }
