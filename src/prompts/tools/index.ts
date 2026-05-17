@@ -76,6 +76,39 @@ Usage:
 - Set multi_folder=false for single-folder mode (audio files at root), multi_folder=true for multi-folder mode (subfolders each contain audio).
 - Use the result to show the user what will happen before any files are modified.
 
+circle_add_by_rg(rj_code, circle_url?, nickname?, remark?)
+Add a circle to the local circle library by looking up an existing RJ work record.
+
+Usage:
+- Use this when the user gives an RJ code and wants to add its circle without typing the circle name manually.
+- Prefer local RJ data first; this tool will only fall back to the work detail page when needed.
+- If the RJ record lacks enough circle information, use circle_add instead.
+
+voice_metadata_scan(source_path)
+Scan a directory for mp3/flac files and read title, artist, album, and cover status.
+
+Usage:
+- Use this first when the user wants to inspect existing audio metadata.
+- This tool only reads metadata and does not modify files.
+
+voice_metadata_update(source_path, relative_path, title?, artist?, album?, cover_image_path?, cover_image_base64?, remove_cover?)
+Update metadata for a single audio file.
+
+Usage:
+- Use this for single-file metadata edits.
+- relative_path must point to a file under source_path.
+- Use remove_cover=true to delete the embedded cover.
+- Use cover_image_path or cover_image_base64 to replace the cover.
+
+voice_metadata_apply_template(source_path, relative_paths?, title_mode?, title_template?, artist?, album?, cover_image_path?, cover_image_base64?, remove_cover?)
+Batch-apply metadata to multiple audio files in a directory.
+
+Usage:
+- Use this for bulk metadata changes such as unified artist, album, title rules, or cover image.
+- Use title_mode="filename" to set title from each filename.
+- Use title_mode="template" together with title_template for custom batch titles.
+- Do not use this tool as a replacement for rj_work_ops_process.
+
 rj_work_ops_process(source_path, target_format, keep_source, threads, output_base_path, force_overwrite?, multi_folder?, selected_folders?, cover_image?)
 Execute audio format conversion and file organization with real-time progress updates.
 
@@ -106,6 +139,42 @@ Multi-folder workflow (/workMatchMulti):
    Q5 header="输出路径"  — show output_path_preview as first option (Recommended); custom=true
    Q6 header="选择子文件夹" — list sub_folder names from preview; multiple=true
 3. Call rj_work_ops_process with multi_folder=true and selected_folders from Q6.
+
+works_update_status(rj_code, status)
+更新 /works 页面指定作品的状态。
+
+Usage:
+- 仅用于 /works 页面语义下的状态更新。
+- status: 0=未下载，1=已下载，2=已删除。
+
+rj_set_source(rj_code, source, matched_url?)
+更新本地 RJ 作品来源。
+
+Usage:
+- 用于资源匹配命中后的来源确认场景。
+- source: mega | asmrone。
+- Mega 场景可传 matched_url，同步写入 download_links。
+- asmrone 场景会清空旧 download_links，即使传入 matched_url 也会忽略。
+- 资源匹配成功后如需更新来源，应先通过 ask 确认，再调用此工具。
+- 多个命中项需要分步骤处理时，可配合 todowrite 跟踪确认范围、批量更新与结果汇总。
+
+match_mega_resources(match_all?, rj_code?)
+Check whether resources exist in Mega. Supports checking all pending local works or a single RJ code.
+
+Usage:
+- 这是查询型工具，只负责返回匹配结果，不直接修改作品来源。
+- 若 match_all=false，则必须提供 rj_code。
+- 命中结果会结构化返回 source=mega 与 matched_url。
+- 资源匹配成功后，如需变更 source 为 mega，应先通过 ask 确认，再调用 rj_set_source。
+
+match_asmrone_resources(match_all?, rj_code?)
+Check whether resources exist in ASMR.ONE. Supports checking all pending local works or a single RJ code.
+
+Usage:
+- 这是查询型工具，只负责返回匹配结果，不直接修改作品来源。
+- 若 match_all=false，则必须提供 rj_code。
+- 命中结果会结构化返回 source=asmrone，且不返回 matched_url。
+- 资源匹配成功后，如需变更 source 为 asmrone，应先通过 ask 确认，再调用 rj_set_source。
 
 explore(task, reuseMode?, subagentId?)
 Delegate file exploration to an explore subagent.

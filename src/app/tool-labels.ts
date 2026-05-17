@@ -26,5 +26,7 @@ export const getToolCallLabel = (callName: string, args: Record<string, unknown>
   if (callName === "circle_check_exists") return "Check Circle Exists";
   if (callName === "match_mega_resources") return args.match_all === false ? `Match Mega ${args.rj_code ?? ""}` : "Match Mega All";
   if (callName === "match_asmrone_resources") return args.match_all === false ? `Match ASMROne ${args.rj_code ?? ""}` : "Match ASMROne All";
+  if (callName === "rj_set_source") return `Set RJ Source ${args.rj_code ?? ""}`;
+  if (callName === "works_update_status") return `Set Works Status ${args.rj_code ?? ""}`;
   return callName;
 };

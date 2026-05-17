@@ -19,10 +19,12 @@ export type ResourceMatchSelection =
   | { matchAll: false; rjCode: string };
 
 export interface ResourceMatchItem {
-  rjCode: string;
+  rj_code: string;
+  source: ResourceMatchMode;
   title: string | null;
   circle: string | null;
   exists: boolean;
+  matched_url?: string;
   message?: string;
 }
 
@@ -285,10 +287,12 @@ export const matchMegaResources = (selection: ResourceMatchSelection): ResourceM
   const items = candidates.map((candidate) => {
     const row = excelMap.get(candidate.rj_code);
     return {
-      rjCode: candidate.rj_code,
+      rj_code: candidate.rj_code,
+      source: "mega",
       title: candidate.title ?? row?.title ?? null,
       circle: candidate.circle ?? row?.circle ?? null,
       exists: Boolean(row),
+      matched_url: row?.megaLink,
       message: row ? `MEGA: ${row.megaLink}` : undefined,
     } satisfies ResourceMatchItem;
   });
@@ -319,7 +323,8 @@ export const matchAsmroOneResources = async (selection: ResourceMatchSelection):
     try {
       const { work, worksCount } = await fetchAsmroOneWork(candidate.rj_code);
       items.push({
-        rjCode: candidate.rj_code,
+        rj_code: candidate.rj_code,
+        source: "asmrone",
         title: candidate.title ?? optionalText(work?.title) ?? optionalText(work?.name),
         circle: candidate.circle ?? optionalText(work?.circle) ?? optionalText(work?.group),
         exists: Boolean(work),
@@ -327,7 +332,8 @@ export const matchAsmroOneResources = async (selection: ResourceMatchSelection):
       });
     } catch (error) {
       items.push({
-        rjCode: candidate.rj_code,
+        rj_code: candidate.rj_code,
+        source: "asmrone",
         title: candidate.title,
         circle: candidate.circle,
         exists: false,

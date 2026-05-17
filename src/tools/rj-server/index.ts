@@ -2,6 +2,7 @@ import { openDb, parseTags, serializeTags, normalizeRjCode } from "./db.ts";
 import { cacheGet, cacheSet, rankingCacheKey } from "./cache.ts";
 import { scrapeRanking, scrapeWorkDetail, scrapeCircleLatestWorks, type RankingType, type RankingItem } from "./scraper.ts";
 import { matchMegaResources, matchAsmroOneResources, type ResourceMatchSelection, type ResourceMatchResult } from "./resource-match.ts";
+import { scanVoiceMetadata, updateVoiceMetadata, applyVoiceMetadataTemplate, type VoiceMetadataScanArgs, type VoiceMetadataUpdateArgs, type VoiceMetadataTemplateArgs } from "./voice-metadata.ts";
 import { parsePositiveInt, parseRankingType } from "../../app/rank-page.ts";
 
 export interface RjServerToolResult {
@@ -127,6 +128,13 @@ export interface CheckRjExistsArgs {
 
 export interface AddCircleArgs {
   name: string;
+  circle_url?: string;
+  nickname?: string;
+  remark?: string;
+}
+
+export interface AddCircleByRgArgs {
+  rj_code: string;
   circle_url?: string;
   nickname?: string;
   remark?: string;
@@ -285,6 +293,46 @@ export const updateRjStatusTool = (args: WorksUpdateStatusArgs): RjServerToolRes
     };
   } catch (err) {
     return { content: `更新 RJ 状态失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
+  }
+};
+
+export const buildMegaDownloadLinks = (matchedUrl: string): string => JSON.stringify({ mega: [matchedUrl] });
+
+export const updateRjSourceTool = (args: RjSetSourceArgs): RjServerToolResult => {
+  try {
+    const rjCode = normalizeRjCode(args.rj_code);
+    const source = args.source === "mega" || args.source === "asmrone" ? args.source : null;
+    if (!source) {
+      return { content: `无效的 source: ${String(args.source)}`, resultLabel: "error", isError: true };
+    }
+
+    const matchedUrl = args.matched_url?.trim() || null;
+    const db = openDb(false);
+    const exists = db.prepare("SELECT 1 FROM rj WHERE rj_code = ? LIMIT 1").get(rjCode);
+    if (!exists) {
+      db.close();
+      return { content: `未找到 RJ: ${rjCode}`, resultLabel: "not found", isError: true };
+    }
+
+    let result;
+    let downloadLinksUpdated = false;
+    if (source === "asmrone") {
+      result = db.prepare("UPDATE rj SET source = ?, download_links = NULL WHERE rj_code = ?").run(source, rjCode);
+      downloadLinksUpdated = true;
+    } else if (matchedUrl) {
+      result = db.prepare("UPDATE rj SET source = ?, download_links = ? WHERE rj_code = ?").run(source, buildMegaDownloadLinks(matchedUrl), rjCode);
+      downloadLinksUpdated = true;
+    } else {
+      result = db.prepare("UPDATE rj SET source = ? WHERE rj_code = ?").run(source, rjCode);
+    }
+    db.close();
+    return {
+      content: JSON.stringify({ rj_code: rjCode, source, matched_url: matchedUrl, download_links_updated: downloadLinksUpdated, updated: result.changes > 0 }, null, 2),
+      resultLabel: `RJ source updated ${rjCode}`,
+      isError: false,
+    };
+  } catch (err) {
+    return { content: `更新 RJ 来源失败: ${err instanceof Error ? err.message : String(err)}`, resultLabel: "error", isError: true };
   }
 };
 
@@ -637,6 +685,12 @@ export interface WorksUpdateStatusArgs {
   status: number;
 }
 
+export interface RjSetSourceArgs {
+  rj_code: string;
+  source: "mega" | "asmrone";
+  matched_url?: string;
+}
+
 export interface RankListArgs {
   ranking_type?: string | null;
   page?: number;
@@ -682,6 +736,8 @@ export const worksDeleteTool = (args: WorksDeleteArgs): RjServerToolResult => re
 
 export const worksUpdateStatusTool = (args: WorksUpdateStatusArgs): RjServerToolResult => updateRjStatusTool(args);
 
+export const rjSetSourceTool = (args: RjSetSourceArgs): RjServerToolResult => updateRjSourceTool(args);
+
 export const circleListTool = (args: CircleQueryArgs): RjServerToolResult => queryCircleTool(args);
 
 export const circleGetTool = (args: CircleDetailArgs): RjServerToolResult => getCircleDetailTool(args);
@@ -716,7 +772,110 @@ export const rankRemoveWorkTool = (args: RemoveRjArgs): RjServerToolResult => re
 
 export const rankAddCircleTool = (args: RankCircleArgs): RjServerToolResult => addCircleTool(args);
 
+export const circleAddByRgTool = async (args: AddCircleByRgArgs): Promise<RjServerToolResult> => {
+  try {
+    const rjCode = normalizeRjCode(args.rj_code);
+    if (!rjCode) {
+      return { content: "rj_code 不能为空", resultLabel: "error", isError: true };
+    }
+
+    const db = openDb(true);
+    const row = db.prepare("SELECT rj_code, circle, circle_url, title_url FROM rj WHERE rj_code = ? LIMIT 1").get(rjCode) as {
+      rj_code: string;
+      circle: string | null;
+      circle_url: string | null;
+      title_url: string | null;
+    } | undefined;
+    db.close();
+
+    if (!row) {
+      return { content: `本地数据库中未找到 RJ: ${rjCode}`, resultLabel: "not found", isError: true };
+    }
+
+    let circleName = optionalText(row.circle);
+    let circleUrl = optionalText(args.circle_url) ?? optionalText(row.circle_url);
+
+    if (!circleName && row.title_url) {
+      const detail = await scrapeWorkDetail(row.title_url);
+      circleName = optionalText(detail?.circle ?? null);
+      circleUrl = circleUrl ?? optionalText(detail?.circle_url ?? null);
+    }
+
+    if (!circleName) {
+      return {
+        content: `无法从 ${rjCode} 解析社团名，请先补全作品信息或改用 circle_add 手动添加。`,
+        resultLabel: "not found",
+        isError: true,
+      };
+    }
+
+    return addCircleTool({
+      name: circleName,
+      circle_url: circleUrl ?? undefined,
+      nickname: args.nickname,
+      remark: args.remark,
+    });
+  } catch (err) {
+    return {
+      content: `通过 RJ 添加社团失败: ${err instanceof Error ? err.message : String(err)}`,
+      resultLabel: "error",
+      isError: true,
+    };
+  }
+};
+
 export const rankRemoveCircleTool = (args: RemoveCircleArgs): RjServerToolResult => removeCircleTool(args);
+
+export const voiceMetadataScanTool = async (args: VoiceMetadataScanArgs): Promise<RjServerToolResult> => {
+  try {
+    const result = await scanVoiceMetadata(args);
+    return {
+      content: JSON.stringify(result, null, 2),
+      resultLabel: result.message,
+      isError: false,
+    };
+  } catch (err) {
+    return {
+      content: `扫描音频 metadata 失败: ${err instanceof Error ? err.message : String(err)}`,
+      resultLabel: "error",
+      isError: true,
+    };
+  }
+};
+
+export const voiceMetadataUpdateTool = async (args: VoiceMetadataUpdateArgs): Promise<RjServerToolResult> => {
+  try {
+    const result = await updateVoiceMetadata(args);
+    return {
+      content: JSON.stringify(result, null, 2),
+      resultLabel: result.message,
+      isError: !result.success,
+    };
+  } catch (err) {
+    return {
+      content: `更新音频 metadata 失败: ${err instanceof Error ? err.message : String(err)}`,
+      resultLabel: "error",
+      isError: true,
+    };
+  }
+};
+
+export const voiceMetadataApplyTemplateTool = async (args: VoiceMetadataTemplateArgs): Promise<RjServerToolResult> => {
+  try {
+    const result = await applyVoiceMetadataTemplate(args);
+    return {
+      content: JSON.stringify(result, null, 2),
+      resultLabel: result.message,
+      isError: !result.success,
+    };
+  } catch (err) {
+    return {
+      content: `批量应用音频 metadata 模板失败: ${err instanceof Error ? err.message : String(err)}`,
+      resultLabel: "error",
+      isError: true,
+    };
+  }
+};
 
 export const queryRjTool = (args: RjQueryArgs): RjServerToolResult => {
   const { page = 1, page_size = 20, rj_code, title, circle, cv, source, status,

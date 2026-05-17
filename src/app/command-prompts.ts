@@ -48,7 +48,7 @@ export const buildResourceMatchCommandPrompt = (
   return {
     kind: "command",
     displayText,
-    promptText: `请调用 ${toolName} 工具检查资源是否存在。\n\n要求：\n1. 只调用一次 ${toolName}，参数使用 ${argsText}\n2. 如果工具返回错误，直接输出错误信息\n3. 如果返回 message 且 total=0，直接输出该 message\n4. 否则输出结果时使用以下结构：\n   - 第一行输出标题：${title}\n   - 接着输出摘要：检查总数、存在、不存在、失败\n   - 单个 RJ 时输出：RJ、结果、标题、社团、补充说明\n   - 批量时输出命中列表、未命中 RJ、失败 RJ\n5. 不要输出思考过程，不要输出 JSON 原文`,
+    promptText: `请调用 ${toolName} 工具检查资源是否存在。\n\n要求：\n1. 先且只调用一次 ${toolName}，参数使用 ${argsText}\n2. 如果工具返回错误，直接输出错误信息，不要继续 ask、todowrite 或 rj_set_source\n3. 如果返回 message 且 total=0，直接输出该 message，不要继续 ask、todowrite 或 rj_set_source\n4. 如果 matched=0，只按结果结构输出匹配结果，不要继续 ask、todowrite 或 rj_set_source\n5. 如果存在命中项：\n   - 单个 RJ 命中时，先调用一次 ask，确认是否要把该 RJ 的 source 更新为 ${isMega ? "mega" : "asmrone"}；未经确认不得调用 rj_set_source\n   - 批量命中时，先调用一次 ask，确认是否批量把命中 RJ 的 source 更新为 ${isMega ? "mega" : "asmrone"}\n   - 批量流程进入多步骤处理时，再使用 todowrite 跟踪“确认更新范围 / 批量更新 source / 汇总结果”\n   - 只有在用户明确确认后，才能对确认范围内的 RJ 调用 rj_set_source，并将 source 设置为 ${isMega ? "mega" : "asmrone"}\n6. 输出结果时使用以下结构：\n   - 第一行输出标题：${title}\n   - 接着输出摘要：检查总数、存在、不存在、失败\n   - 单个 RJ 时输出：RJ、结果、标题、社团、补充说明\n   - 批量时输出命中列表、未命中 RJ、失败 RJ\n7. 如果执行了 source 更新，在资源匹配结果后追加“来源处理结果”摘要\n8. 不要输出思考过程，不要输出 JSON 原文`,
     label: "command",
   };
 };

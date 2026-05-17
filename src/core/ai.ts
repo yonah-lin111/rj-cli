@@ -640,6 +640,25 @@ export const circleAddSchema: OpenAI.Chat.ChatCompletionTool = {
   },
 };
 
+export const circleAddByRgSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "circle_add_by_rg",
+    description: "根据本地已存在的 RJ 作品信息反查并添加社团到本地社团库。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+        circle_url: { type: "string", description: "可选社团链接；未提供时优先使用本地记录或作品详情页信息。" },
+        nickname: { type: "string", description: "社团昵称。" },
+        remark: { type: "string", description: "备注。" },
+      },
+      required: ["rj_code"],
+      additionalProperties: false,
+    },
+  },
+};
+
 export const circleRemoveSchema: OpenAI.Chat.ChatCompletionTool = {
   type: "function",
   function: {
@@ -723,6 +742,24 @@ export const worksUpdateStatusSchema: OpenAI.Chat.ChatCompletionTool = {
         status: { type: "number", enum: [0, 1, 2], description: "作品状态：0 未下载，1 已下载，2 已删除。" },
       },
       required: ["rj_code", "status"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const rjSetSourceSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "rj_set_source",
+    description: "更新本地 RJ 作品来源。mega 可结合 matched_url 写入下载链接；asmrone 会清空旧 download_links。",
+    parameters: {
+      type: "object",
+      properties: {
+        rj_code: { type: "string", description: "RJ 号，如 RJ123456。" },
+        source: { type: "string", enum: ["mega", "asmrone"], description: "作品来源：mega 或 asmrone。" },
+        matched_url: { type: "string", description: "Mega 匹配命中时返回的链接；仅 source=mega 时可选传入，用于同步写入 download_links。" },
+      },
+      required: ["rj_code", "source"],
       additionalProperties: false,
     },
   },
@@ -1049,6 +1086,69 @@ export const rjWorkOpsPreviewSchema: OpenAI.Chat.ChatCompletionTool = {
         multi_folder: { type: "boolean", description: "多音声文件夹模式，源文件夹下有多个子文件夹时使用。默认 false。" },
       },
       required: ["source_path", "target_format"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const voiceMetadataScanSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "voice_metadata_scan",
+    description: "扫描目录中的 mp3/flac 文件，读取标题、艺术家、专辑与封面状态。",
+    parameters: {
+      type: "object",
+      properties: {
+        source_path: { type: "string", description: "要扫描的音频目录绝对路径。" },
+      },
+      required: ["source_path"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const voiceMetadataUpdateSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "voice_metadata_update",
+    description: "更新单个音频文件的 metadata，可修改标题、艺术家、专辑并设置或删除封面。",
+    parameters: {
+      type: "object",
+      properties: {
+        source_path: { type: "string", description: "音频根目录绝对路径。" },
+        relative_path: { type: "string", description: "相对于 source_path 的音频文件路径。" },
+        title: { type: ["string", "null"], description: "标题；传 null 或空字符串可清空。" },
+        artist: { type: ["string", "null"], description: "艺术家；传 null 或空字符串可清空。" },
+        album: { type: ["string", "null"], description: "专辑；传 null 或空字符串可清空。" },
+        cover_image_path: { type: ["string", "null"], description: "封面图片绝对路径。" },
+        cover_image_base64: { type: ["string", "null"], description: "base64 格式的封面图片内容。" },
+        remove_cover: { type: "boolean", description: "是否移除封面。" },
+      },
+      required: ["source_path", "relative_path"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const voiceMetadataApplyTemplateSchema: OpenAI.Chat.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "voice_metadata_apply_template",
+    description: "按模板批量更新目录内音频文件的 metadata，可统一标题规则、艺术家、专辑与封面。",
+    parameters: {
+      type: "object",
+      properties: {
+        source_path: { type: "string", description: "音频根目录绝对路径。" },
+        relative_paths: { type: "array", items: { type: "string" }, description: "可选，指定要更新的相对路径列表；不传则处理全部音频。" },
+        title_mode: { type: "string", enum: ["keep", "filename", "template"], description: "标题模式：保留原值、使用文件名、或使用模板。" },
+        title_template: { type: "string", description: "标题模板，支持 {filename}、{basename}、{relative_path}。" },
+        artist: { type: ["string", "null"], description: "统一设置的艺术家。" },
+        album: { type: ["string", "null"], description: "统一设置的专辑。" },
+        cover_image_path: { type: ["string", "null"], description: "封面图片绝对路径。" },
+        cover_image_base64: { type: ["string", "null"], description: "base64 格式的封面图片内容。" },
+        remove_cover: { type: "boolean", description: "是否移除封面。" },
+      },
+      required: ["source_path"],
       additionalProperties: false,
     },
   },
