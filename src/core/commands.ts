@@ -27,6 +27,7 @@ export type CommandAction =
   | { type: "messages"; messages: string[] }
   | { type: "system-messages"; messages: string[] }
   | { type: "show-model-selector"; search: string }
+  | { type: "show-settings-selector" }
   | { type: "open-web-ui" }
   | { type: "show-rank-selector" }
   | { type: "show-match-mega-selector" }
@@ -96,6 +97,12 @@ const commandList: SlashCommand[] = [
       type: "show-model-selector",
       search: args.join(" ").trim(),
     }),
+  },
+  {
+    name: "/setting",
+    usage: "/setting",
+    description: "Open the settings selector.",
+    handler: () => ({ type: "show-settings-selector" }),
   },
   {
     name: "/webUI",

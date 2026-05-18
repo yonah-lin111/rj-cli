@@ -61,6 +61,7 @@ export interface Message {
   expandedText?: string;
   label?: string;
   thinking?: string;
+  showThinking?: boolean;
   strikethrough?: boolean;
   compact?: boolean;
   /** assistant 消息的多轮段落（有此字段时忽略 text/thinking） */
@@ -176,7 +177,8 @@ const renderToolCall = (entry: ToolCallEntry): string[] => {
   return lines;
 };
 
-const renderThinking = (_thinking: string, _width: number): string[] => [];
+const renderThinking = (thinking: string, width: number): string[] =>
+  renderMarkdown(thinking.trim(), width, { color: theme.thinkingText });
 
 const renderTodoList = (entry: ToolCallEntry, width: number): string[] => {
   if (!entry.displayText) return [];
@@ -214,11 +216,12 @@ const filterTodoStatusLines = (text: string, hasTodoWrite: boolean): string => {
 const renderSegment = (
   seg: AssistantSegment,
   contentWidth: number,
+  showThinking: boolean,
 ): string[] => {
   const lines: string[] = [];
   const hasTodoWrite = seg.toolCalls?.some((entry) => entry.name === "todowrite") ?? false;
   const text = filterTodoStatusLines(seg.text, hasTodoWrite);
-  if (seg.thinking?.trim()) {
+  if (showThinking && seg.thinking?.trim()) {
     lines.push(...renderThinking(seg.thinking, contentWidth));
     if (text.trim() || seg.toolCalls?.length) lines.push("");
   }
@@ -275,7 +278,7 @@ export const formatMessage = (message: Message, width = 80): string[] => {
   const lines = [header];
   if (message.segments?.length) {
     for (let i = 0; i < message.segments.length; i++) {
-      const segLines = renderSegment(message.segments[i], contentWidth);
+      const segLines = renderSegment(message.segments[i], contentWidth, message.showThinking === true);
       if (segLines.length) {
         if (i > 0) lines.push("");
         lines.push(...segLines);
@@ -288,7 +291,7 @@ export const formatMessage = (message: Message, width = 80): string[] => {
     }
   } else {
     // 兼容无 segments 的旧格式
-    if (message.thinking?.trim()) {
+    if (message.showThinking === true && message.thinking?.trim()) {
       lines.push(...renderThinking(message.thinking, contentWidth));
       if (message.text.trim()) lines.push("");
     }

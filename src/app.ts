@@ -22,7 +22,7 @@ import {
 } from "./tools/local/upload-mega-file.ts";
 import {
   formatContextWindow, getModel, getProvider, loadConfig, loadPromptHistory,
-  saveDefaultModel, savePromptHistory,
+  saveDefaultModel, savePromptHistory, saveSettings,
 } from "./core/config.ts";
 import { AppState, createInitialState } from "./core/state.ts";
 import { executeSlashCommand, getCommands, helpText, type AppCommandContext } from "./core/commands.ts";
@@ -34,6 +34,7 @@ import { ResourceMatchSelector } from "./ui/resource-match-selector.ts";
 import { CircleSelector, type CircleSelection } from "./ui/circle-selector.ts";
 import { WorksSelector, type WorksSelection } from "./ui/works-selector.ts";
 import { SessionSelector } from "./ui/session-selector.ts";
+import { SettingsSelector, type SettingDefinition, type SettingsSelection } from "./ui/settings-selector.ts";
 import { SubagentSelector } from "./ui/subagent-selector.ts";
 import { AskPrompt } from "./ui/ask-prompt.ts";
 import { createAskId, registerAskPending, resolveAsk, rejectAsk, formatAskResult, type AskQuestion } from "./tools/base/ask.ts";
@@ -75,6 +76,7 @@ export class RJApp {
   private resourceMatchMode?: "mega" | "asmrone";
   private circleSelector?: CircleSelector;
   private worksSelector?: WorksSelector;
+  private settingsSelector?: SettingsSelector;
   private rankPageServer?: Server;
   private viteProcess?: ChildProcess;
   private openUrlCommand?: OpenUrlCommand;
@@ -242,6 +244,12 @@ export class RJApp {
         return { consume: true };
       }
 
+      if (this.settingsSelector) {
+        this.settingsSelector.handleInput(data);
+        this.requestRender();
+        return { consume: true };
+      }
+
       if (this.sessionSelector) {
         this.sessionSelector.handleInput(data);
         this.requestRender();
@@ -347,6 +355,7 @@ export class RJApp {
       this.resourceMatchSelector ||
       this.circleSelector ||
       this.worksSelector ||
+      this.settingsSelector ||
       this.sessionSelector ||
       this.subagentSelector,
     );
@@ -1082,6 +1091,12 @@ export class RJApp {
       return true;
     }
 
+    if (action.type === "show-settings-selector") {
+      this.showSettingsSelector();
+      this.requestRender();
+      return true;
+    }
+
     if (action.type === "system-messages") {
       for (const message of action.messages) this.addMessage("system", message);
       this.requestRender();
@@ -1537,6 +1552,45 @@ export class RJApp {
     this.tui.setFocus(this.editor);
   }
 
+  private settingDefinitions(): SettingDefinition[] {
+    return [
+      {
+        key: "showThinking",
+        label: "showThinking",
+        description: "Show assistant thinking content in chat messages",
+      },
+    ];
+  }
+
+  private showSettingsSelector(): void {
+    const handleClose = (selection: SettingsSelection): void => {
+      this.closeSettingsSelector();
+      if (selection.changed) {
+        this.config = saveSettings(this.config, selection.settings);
+        this.showPrompt(`Settings saved. showThinking=${selection.settings.showThinking ? "true" : "false"}`);
+      }
+      this.requestRender();
+    };
+    const selector = new SettingsSelector(
+      this.settingDefinitions(),
+      this.config.settings,
+      handleClose,
+      () => handleClose({
+        settings: { ...this.config.settings },
+        changed: false,
+      }),
+    );
+    this.settingsSelector = selector;
+    this.armSelectorConfirmSuppression();
+    this.refreshChat();
+    this.tui.setFocus(selector);
+  }
+
+  private closeSettingsSelector(): void {
+    this.settingsSelector = undefined;
+    this.tui.setFocus(this.editor);
+  }
+
   private showAskPrompt(id: string, questions: AskQuestion[]): void {
     const prompt = new AskPrompt(
       questions,
@@ -1705,13 +1759,18 @@ export class RJApp {
       this.chat.addChild(this.circleSelector);
     } else if (this.worksSelector) {
       this.chat.addChild(this.worksSelector);
+    } else if (this.settingsSelector) {
+      this.chat.addChild(this.settingsSelector);
     } else if (this.sessionSelector) {
       this.chat.addChild(this.sessionSelector);
     } else if (this.subagentSelector) {
       this.chat.addChild(this.subagentSelector);
     } else {
       const messages = subagentSnapshot ? subagentSnapshot.messages : this.messages;
-      this.chat.addChild(new MessagesView(() => messages));
+      this.chat.addChild(new MessagesView(() => messages.map((message) => ({
+        ...message,
+        showThinking: message.kind === "assistant" ? this.config.settings.showThinking : message.showThinking,
+      }))));
       if (this.askPrompt) {
         this.chat.addChild(new Spacer(1));
         this.chat.addChild(this.askPrompt);

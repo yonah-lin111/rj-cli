@@ -38,6 +38,11 @@ export interface RJSubagentConfig {
   keybinding: string;
 }
 
+/** 可持久化的设置项 */
+export interface RJSettingsConfig {
+  showThinking: boolean;
+}
+
 /** 应用全局配置 */
 export interface RJConfig {
   defaultProvider: string;
@@ -45,6 +50,7 @@ export interface RJConfig {
   fileReading: RJFileReadingConfig;
   providers: RJProviderConfig[];
   subagents: RJSubagentConfig[];
+  settings: RJSettingsConfig;
   configPath: string;
 }
 
@@ -55,6 +61,7 @@ interface RawRJConfig {
   fileReading?: unknown;
   providers?: unknown;
   subagents?: unknown;
+  settings?: unknown;
 }
 
 /** 配置文件路径 */
@@ -65,6 +72,11 @@ const DEFAULT_FILE_READING: RJFileReadingConfig = {
   maxFileSizeBytes: 1048576,
   maxDirectoryEntries: 200,
   allowedExtensions: [],
+};
+
+/** 默认设置 */
+const DEFAULT_SETTINGS: RJSettingsConfig = {
+  showThinking: false,
 };
 
 /** 内置 explore subagent 默认配置 */
@@ -92,6 +104,7 @@ const fallbackConfig: RJConfig = {
     },
   ],
   subagents: [DEFAULT_EXPLORE_AGENT],
+  settings: DEFAULT_SETTINGS,
   configPath,
 };
 
@@ -172,6 +185,28 @@ const parseProvider = (value: unknown): RJProviderConfig | null => {
   };
 };
 
+/** 解析设置配置，缺失字段时回退到默认值 */
+const parseSettings = (value: unknown): RJSettingsConfig => {
+  const record = asRecord(value);
+  return {
+    showThinking: record?.showThinking === true,
+  };
+};
+
+/** 将配置写入磁盘 */
+const writeConfig = (config: RJConfig): void => {
+  const output: RawRJConfig = {
+    defaultProvider: config.defaultProvider,
+    defaultModel: config.defaultModel,
+    providers: config.providers,
+    fileReading: config.fileReading,
+    subagents: config.subagents,
+    settings: config.settings,
+  };
+  mkdirSync(dirname(config.configPath), { recursive: true });
+  writeFileSync(config.configPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+};
+
 /**
  * 从 ~/.RJ/config.json 加载配置，文件不存在或解析失败时返回兜底配置。
  */
@@ -212,8 +247,9 @@ export const loadConfig = (): RJConfig => {
       ? root.subagents.map(parseSubagent).filter((s): s is RJSubagentConfig => Boolean(s))
       : [];
     const subagents = parsedSubagents.length > 0 ? parsedSubagents : [DEFAULT_EXPLORE_AGENT];
+    const settings = parseSettings(root.settings);
 
-    return { defaultProvider, defaultModel, fileReading, providers, subagents, configPath };
+    return { defaultProvider, defaultModel, fileReading, providers, subagents, settings, configPath };
   } catch {
     return fallbackConfig;
   }
@@ -242,15 +278,17 @@ export const saveDefaultModel = (config: RJConfig, providerId: string, modelId: 
     defaultProvider: provider.id,
     defaultModel: model.id,
   };
-  const output: RawRJConfig = {
-    defaultProvider: updated.defaultProvider,
-    defaultModel: updated.defaultModel,
-    providers: updated.providers,
-    fileReading: updated.fileReading,
-    subagents: updated.subagents,
+  writeConfig(updated);
+  return updated;
+};
+
+/** 持久化设置并返回更新后的配置 */
+export const saveSettings = (config: RJConfig, settings: RJSettingsConfig): RJConfig => {
+  const updated: RJConfig = {
+    ...config,
+    settings: { ...settings },
   };
-  mkdirSync(dirname(updated.configPath), { recursive: true });
-  writeFileSync(updated.configPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+  writeConfig(updated);
   return updated;
 };
 
