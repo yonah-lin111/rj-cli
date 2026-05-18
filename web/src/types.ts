@@ -122,6 +122,7 @@ export interface ResourceMatchItem {
   rj_code: string;
   title?: string;
   source?: string;
+  current_source?: string | null;
   matched_url?: string;
   status?: string;
   [key: string]: unknown;

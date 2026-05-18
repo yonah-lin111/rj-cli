@@ -21,6 +21,7 @@ export type ResourceMatchSelection =
 export interface ResourceMatchItem {
   rj_code: string;
   source: ResourceMatchMode;
+  current_source: string | null;
   title: string | null;
   circle: string | null;
   exists: boolean;
@@ -33,7 +34,6 @@ export interface ResourceMatchResult {
   total: number;
   matched: number;
   unmatched: number;
-  errors: number;
   items: ResourceMatchItem[];
   message?: string;
 }
@@ -42,6 +42,7 @@ type LocalRjRow = {
   rj_code: string;
   title: string | null;
   circle: string | null;
+  source: string | null;
 };
 
 type MegaExcelRow = {
@@ -242,7 +243,7 @@ const getBatchCandidates = (): LocalRjRow[] => {
   const db = openDb(true);
   try {
     return db.prepare(`
-      SELECT rj_code, title, circle
+      SELECT rj_code, title, circle, source
       FROM rj
       WHERE status = 0 AND (source IS NULL OR TRIM(source) = '')
       ORDER BY id DESC
@@ -255,7 +256,7 @@ const getBatchCandidates = (): LocalRjRow[] => {
 const getLocalRjByCode = (rjCode: string): LocalRjRow | null => {
   const db = openDb(true);
   try {
-    return db.prepare(`SELECT rj_code, title, circle FROM rj WHERE rj_code = ? LIMIT 1`).get(rjCode) as LocalRjRow | undefined ?? null;
+    return db.prepare(`SELECT rj_code, title, circle, source FROM rj WHERE rj_code = ? LIMIT 1`).get(rjCode) as LocalRjRow | undefined ?? null;
   } finally {
     db.close();
   }
@@ -265,7 +266,7 @@ const getSelectionRows = (selection: ResourceMatchSelection): LocalRjRow[] => {
   if (selection.matchAll) return getBatchCandidates();
   const rjCode = normalizeRjCode(selection.rjCode);
   const local = getLocalRjByCode(rjCode);
-  return [local ?? { rj_code: rjCode, title: null, circle: null }];
+  return [local ?? { rj_code: rjCode, title: null, circle: null, source: null }];
 };
 
 const buildResult = (mode: ResourceMatchMode, items: ResourceMatchItem[], message?: string): ResourceMatchResult => ({
@@ -273,7 +274,6 @@ const buildResult = (mode: ResourceMatchMode, items: ResourceMatchItem[], messag
   total: items.length,
   matched: items.filter((item) => item.exists).length,
   unmatched: items.filter((item) => !item.exists && !item.message).length,
-  errors: items.filter((item) => Boolean(item.message)).length,
   items,
   message,
 });
@@ -289,6 +289,7 @@ export const matchMegaResources = (selection: ResourceMatchSelection): ResourceM
     return {
       rj_code: candidate.rj_code,
       source: "mega",
+      current_source: candidate.source,
       title: candidate.title ?? row?.title ?? null,
       circle: candidate.circle ?? row?.circle ?? null,
       exists: Boolean(row),
@@ -321,19 +322,20 @@ export const matchAsmroOneResources = async (selection: ResourceMatchSelection):
   const items: ResourceMatchItem[] = [];
   for (const candidate of candidates) {
     try {
-      const { work, worksCount } = await fetchAsmroOneWork(candidate.rj_code);
+      const { work } = await fetchAsmroOneWork(candidate.rj_code);
       items.push({
         rj_code: candidate.rj_code,
         source: "asmrone",
+        current_source: candidate.source,
         title: candidate.title ?? optionalText(work?.title) ?? optionalText(work?.name),
         circle: candidate.circle ?? optionalText(work?.circle) ?? optionalText(work?.group),
         exists: Boolean(work),
-        message: work ? `works: ${worksCount}` : undefined,
       });
     } catch (error) {
       items.push({
         rj_code: candidate.rj_code,
         source: "asmrone",
+        current_source: candidate.source,
         title: candidate.title,
         circle: candidate.circle,
         exists: false,
