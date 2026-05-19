@@ -98,7 +98,18 @@ const loadRjInfoFromDatabase = (rjCode: string): LastQARjInfoItem | undefined =>
   }
 };
 
-const formatLastQARjInfoMessage = (sessionMessages: ChatHistoryMessage[]): string => {
+const formatSpecifiedRjInfoMessage = (rjCode: string): string => {
+  const item = loadRjInfoFromDatabase(rjCode);
+  if (!item) {
+    return `未在本地库中找到 ${rjCode} 的信息。`;
+  }
+  return [`指定 RJ 详情：`, ...formatLastQARjInfoItem(item)].join("\n");
+};
+
+const formatLastQARjInfoMessage = (sessionMessages: ChatHistoryMessage[], rjCode?: string): string => {
+  if (rjCode) {
+    return formatSpecifiedRjInfoMessage(rjCode);
+  }
   const summary = extractLastQARjInfo(sessionMessages);
   if (!summary.range) {
     return "上一轮 QA 尚未完成，无法提取 RJ 信息。";
@@ -1147,9 +1158,9 @@ export class RJApp {
     }
 
     if (action.type === "show-last-qa-rj-info") {
-      const displayText = "/info";
-      this.addMessage("command", displayText, "qa");
-      this.addMessage("assistant", formatLastQARjInfoMessage(this.sessionMessages), "RJ");
+      const displayText = action.rjCode ? `/info [${action.rjCode}]` : "/info []";
+      this.addMessage("command", displayText, "command");
+      this.addMessage("system", formatLastQARjInfoMessage(this.sessionMessages, action.rjCode), "system");
       this.requestRender();
       return true;
     }

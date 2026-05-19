@@ -37,7 +37,7 @@ export type CommandAction =
   | { type: "show-circle-selector" }
   | { type: "show-works-selector" }
   | { type: "show-session-selector" }
-  | { type: "show-last-qa-rj-info" }
+  | { type: "show-last-qa-rj-info"; rjCode?: string }
   | { type: "clear"; messages?: string[] }
   | { type: "undo" }
   | { type: "quit" }
@@ -121,6 +121,40 @@ const parseResourceMatchCommandArgs = (
   return {
     kind: "selection",
     selection: { matchAll: false, rjCode: normalizedRjCode },
+  };
+};
+
+const parseInfoCommandArgs = (
+  raw: string,
+  commandName: string,
+): { kind: "selection"; rjCode?: string } | { kind: "error"; message: string } => {
+  if (!raw) {
+    return { kind: "selection" };
+  }
+
+  if (!raw.startsWith("[") || !raw.endsWith("]")) {
+    return {
+      kind: "error",
+      message: `RJ code must be enclosed in brackets and start with RJ, for example ${commandName} [RJ123456]`,
+    };
+  }
+
+  const value = raw.slice(1, -1).trim();
+  if (!value) {
+    return { kind: "selection" };
+  }
+
+  const normalizedRjCode = value.toUpperCase();
+  if (!normalizedRjCode.startsWith("RJ")) {
+    return {
+      kind: "error",
+      message: `RJ code must start with RJ, for example ${commandName} [RJ123456]`,
+    };
+  }
+
+  return {
+    kind: "selection",
+    rjCode: normalizedRjCode,
   };
 };
 
@@ -236,9 +270,22 @@ const commandList: SlashCommand[] = [
   },
   {
     name: "/info",
-    usage: "/info",
-    description: "Show RJ info from the last completed QA.",
-    handler: () => ({ type: "show-last-qa-rj-info" }),
+    usage: "/info [RJ号]",
+    description: "Show RJ info from the last completed QA or a specific RJ.",
+    handler: (args) => {
+      if (args.length === 0) {
+        return { type: "fill-input", text: "/info []", cursorCol: "/info [".length };
+      }
+      const raw = args.join(" ").trim();
+      const parsed = parseInfoCommandArgs(raw, "/info");
+      if (parsed.kind === "error") {
+        return {
+          type: "messages",
+          messages: [parsed.message],
+        };
+      }
+      return { type: "show-last-qa-rj-info", rjCode: parsed.rjCode };
+    },
   },
   {
     name: "/quit",
