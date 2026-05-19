@@ -1846,7 +1846,7 @@ export class RJApp {
 
   private refreshChat(): void {
     const subagentSnapshot = this.openSubagentId ? this.subagentSnapshots.get(this.openSubagentId) : undefined;
-    this.header.setText(subagentSnapshot ? subagentHeaderText(subagentSnapshot) : headerText());
+    this.header.setText(subagentSnapshot ? subagentHeaderText(subagentSnapshot) : headerText(this.state));
     this.input.clear();
     if (!subagentSnapshot) {
       this.input.addChild(new Spacer(1));
