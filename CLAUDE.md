@@ -73,6 +73,7 @@ These conventions come from `AGENTS.md` and should be followed when modifying co
 - 变量、`type`、`interface`、`enum` 等使用单行注释说明。
 - 方法使用多行注释说明。
 - 方法内部关键部位按需添加简短中文注释，说明关键逻辑、边界条件或非直观决策。
+- 消息提示组件使用英文提示。
 
 ## Useful runtime details
 

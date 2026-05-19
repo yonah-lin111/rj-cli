@@ -36,9 +36,10 @@ export const buildResourceMatchCommandPrompt = (
   selection: ResourceMatchSelection,
 ): ChatSubmission => {
   const isMega = mode === "mega";
-  const displayText = isMega
-    ? selection.matchAll ? "/matchMega -All" : `/matchMega -RJ [${selection.rjCode}]`
-    : selection.matchAll ? "/matchASMROne -All" : `/matchASMROne -RJ [${selection.rjCode}]`;
+  const commandName = isMega ? "/matchMega" : "/matchASMROne";
+  const displayText = selection.matchAll
+    ? `${commandName} []`
+    : `${commandName} [${selection.rjCode}]`;
   const toolName = isMega ? "match_mega_resources" : "match_asmrone_resources";
   const argsText = selection.matchAll
     ? "{\"match_all\":true}"

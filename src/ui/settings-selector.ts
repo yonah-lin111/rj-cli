@@ -167,6 +167,6 @@ export class SettingsSelector extends Container implements Focusable {
       return;
     }
     const value = this.draftSettings[settingItem.settingKey] ? "true" : "false";
-    this.details.setText(theme.dim(`${settingItem.label}: ${value} · Space 切换，Enter/Esc 保存返回`));
+    this.details.setText(theme.dim(`${settingItem.label}: ${value} · Space toggle, Enter/Esc save and close`));
   }
 }

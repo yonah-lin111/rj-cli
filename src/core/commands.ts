@@ -1,4 +1,6 @@
 import type { AskQuestion } from "../tools/base/ask.ts";
+import type { ResourceMatchSelection } from "../tools/rj-server/index.ts";
+import { buildResourceMatchCommandPrompt } from "../app/command-prompts.ts";
 import { buildLocalConfirmQuestion } from "../ui/local-confirm-dialog.ts";
 import {
   planUploadMegaFile,
@@ -82,6 +84,69 @@ const buildOverwritePrompt = (): string => `请基于本地 RJ 数据库生成�
 5. 每个部分都应使用自然语言概括，必要时可结合工具返回的计数做简短条目化说明。
 6. 如果工具调用失败或返回错误，直接说明失败原因，不要继续生成概览。`;
 
+/** 资源匹配斜杠命令解析结果 */
+type ResourceMatchCommandParseResult =
+  | { kind: "selection"; selection: ResourceMatchSelection }
+  | { kind: "error"; message: string };
+
+/** 解析资源匹配斜杠命令的 [] 参数 */
+const parseResourceMatchCommandArgs = (
+  raw: string,
+  commandName: string,
+): ResourceMatchCommandParseResult => {
+  if (!raw) {
+    return { kind: "selection", selection: { matchAll: true } };
+  }
+
+  if (!raw.startsWith("[") || !raw.endsWith("]")) {
+    return {
+      kind: "error",
+      message: `RJ code must be enclosed in brackets and start with RJ, for example ${commandName} [RJ123456]`,
+    };
+  }
+
+  const value = raw.slice(1, -1).trim();
+  if (!value) {
+    return { kind: "selection", selection: { matchAll: true } };
+  }
+
+  const normalizedRjCode = value.toUpperCase();
+  if (!normalizedRjCode.startsWith("RJ")) {
+    return {
+      kind: "error",
+      message: `RJ code must start with RJ, for example ${commandName} [RJ123456]`,
+    };
+  }
+
+  return {
+    kind: "selection",
+    selection: { matchAll: false, rjCode: normalizedRjCode },
+  };
+};
+
+/** 根据资源匹配选择构造命令聊天动作 */
+const buildResourceMatchCommandAction = (
+  mode: "mega" | "asmrone",
+  commandName: string,
+  args: string[],
+): CommandAction => {
+  const raw = args.join(" ").trim();
+  const parsed = parseResourceMatchCommandArgs(raw, commandName);
+  if (parsed.kind === "error") {
+    return {
+      type: "messages",
+      messages: [parsed.message],
+    };
+  }
+
+  const submission = buildResourceMatchCommandPrompt(mode, parsed.selection);
+  return {
+    type: "command-chat",
+    displayText: submission.displayText,
+    promptText: submission.promptText,
+  };
+};
+
 /** 内置斜杠命令列表 */
 const commandList: SlashCommand[] = [
   {
@@ -119,15 +184,25 @@ const commandList: SlashCommand[] = [
   },
   {
     name: "/matchMega",
-    usage: "/matchMega",
+    usage: "/matchMega [RJ号]",
     description: "Check resource existence in Mega.",
-    handler: () => ({ type: "show-match-mega-selector" }),
+    handler: (args) => {
+      if (args.length === 0) {
+        return { type: "fill-input", text: "/matchMega []", cursorCol: "/matchMega [".length };
+      }
+      return buildResourceMatchCommandAction("mega", "/matchMega", args);
+    },
   },
   {
     name: "/matchASMROne",
-    usage: "/matchASMROne",
+    usage: "/matchASMROne [RJ号]",
     description: "Check resource existence in ASMR.ONE.",
-    handler: () => ({ type: "show-match-asmrone-selector" }),
+    handler: (args) => {
+      if (args.length === 0) {
+        return { type: "fill-input", text: "/matchASMROne []", cursorCol: "/matchASMROne [".length };
+      }
+      return buildResourceMatchCommandAction("asmrone", "/matchASMROne", args);
+    },
   },
   {
     name: "/circle",
