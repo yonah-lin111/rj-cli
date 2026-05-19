@@ -13,7 +13,7 @@ import { runBash, runBashTool } from "./tools/base/bash.ts";
 import { writeFileTool, editFileTool, readFileTool, type FileEdit } from "./tools/base/file-writer.ts";
 import { todoWriteTool } from "./tools/base/todo.ts";
 import { streamChat, type ChatHistoryMessage, type ToolCall, type ToolResult, writeFileTool as writeFileSchema, editFileTool as editFileSchema, readFileToolSchema, bashToolSchema, todoWriteToolSchema, rjGetRankingSchema, rjQuerySchema, circleQuerySchema, circleGetDetailSchema, circleUpdateSchema, circleQueryWorksSchema, circleAddWorkSchema, circleRemoveWorkSchema, circleGetLatestWorksSchema, rjGetDetailSchema, rjGetOverviewSchema, rjAddSchema, rjRemoveSchema, rjCheckExistsSchema, circleAddSchema, circleAddByRgSchema, circleRemoveSchema, circleCheckExistsSchema, worksListSchema, worksDeleteSchema, worksUpdateStatusSchema, rjSetSourceSchema, circleListSchema, circleGetSchema, circleDeleteSchema, circleWorksListSchema, circleWorkRemoveSchema, circleLatestWorksListSchema, circleLatestWorkAddSchema, rankListSchema, rankAddWorkSchema, rankRemoveWorkSchema, rankAddCircleSchema, rankRemoveCircleSchema, askToolSchema, exploreToolSchema, rjWorkOpsPreviewSchema, voiceMetadataScanSchema, voiceMetadataUpdateSchema, voiceMetadataApplyTemplateSchema, rjWorkOpsProcessSchema, matchMegaResourcesSchema, matchAsmroOneResourcesSchema } from "./core/ai.ts";
-import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, circleAddByRgTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, rjSetSourceTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool, voiceMetadataScanTool, voiceMetadataUpdateTool, voiceMetadataApplyTemplateTool, matchMegaResourcesTool, matchAsmroOneResourcesTool, type ResourceMatchSelection } from "./tools/rj-server/index.ts";
+import { getRankingTool, queryRjTool, queryCircleTool, getCircleDetailTool, updateCircleTool, queryCircleWorksTool, addWorkToCircleTool, removeWorkFromCircleTool, getCircleLatestWorksTool, getRjDetailTool, getOverviewTool, addRjFromRankingTool, removeRjTool, checkRjExistsTool, addCircleTool, circleAddByRgTool, removeCircleTool, checkCircleExistsTool, worksListTool, worksDeleteTool, worksUpdateStatusTool, rjSetSourceTool, circleListTool, circleGetTool, circleDeleteTool, circleWorksListTool, circleWorkRemoveTool, circleLatestWorksListTool, circleLatestWorkAddTool, rankListTool, rankAddWorkTool, rankRemoveWorkTool, rankAddCircleTool, rankRemoveCircleTool, voiceMetadataScanTool, voiceMetadataUpdateTool, voiceMetadataApplyTemplateTool, matchMegaResourcesTool, matchAsmroOneResourcesTool, type ResourceMatchSelection, type RjDetailArgs } from "./tools/rj-server/index.ts";
 import { previewWorkOps, processWorkOps, type WorkOpsPreviewArgs, type WorkOpsProcessArgs } from "./tools/rj-server/work-ops.ts";
 import {
   executeUploadMegaFile,
@@ -55,7 +55,103 @@ import { handleCircleSelectionAction, loadCircleSelectorItems } from "./app/circ
 import { handleWorksSelectionAction, loadWorksSelectorItems } from "./app/works-actions.ts";
 import { type ChatSubmission } from "./app/command-prompts.ts";
 import { detectOpenUrlCommand, ensureRankPageServer, openUrl, type OpenUrlCommand } from "./app/open-url.ts";
-import { findLastQAPair, trimLastSessionQA } from "./app/message-history.ts";
+import { findLastQAPair, trimLastSessionQA, extractLastQARjInfo, type LastQARjInfoItem } from "./app/message-history.ts";
+
+const formatLastQARjInfoValue = (label: string, value: string | number | boolean | undefined): string | undefined => {
+  if (value === undefined || value === "") return undefined;
+  return `${label}：${String(value)}`;
+};
+
+const formatLastQARjInfoItem = (item: LastQARjInfoItem): string[] => {
+  const lines = [item.rj_code];
+  const values = [
+    formatLastQARjInfoValue("标题", item.title),
+    formatLastQARjInfoValue("社团", item.circle),
+    formatLastQARjInfoValue("CV", item.cv),
+    item.tags?.length ? `标签：${item.tags.join("、")}` : undefined,
+    formatLastQARjInfoValue("来源", item.source),
+    formatLastQARjInfoValue("状态", item.status),
+    formatLastQARjInfoValue("发售日", item.release_date),
+    item.is_all_ages === undefined ? undefined : `全年龄：${item.is_all_ages ? "是" : "否"}`,
+  ].filter((value): value is string => Boolean(value));
+  return values.length > 0 ? [...lines, ...values.map((value) => `  ${value}`)] : lines;
+};
+
+const loadRjInfoFromDatabase = (rjCode: string): LastQARjInfoItem | undefined => {
+  const result = getRjDetailTool({ rj_code: rjCode } satisfies RjDetailArgs);
+  if (result.isError) return undefined;
+  try {
+    const payload = JSON.parse(result.content) as Record<string, unknown>;
+    return {
+      rj_code: rjCode,
+      title: typeof payload.title === "string" ? payload.title : undefined,
+      circle: typeof payload.circle === "string" ? payload.circle : undefined,
+      cv: typeof payload.cv === "string" ? payload.cv : undefined,
+      tags: Array.isArray(payload.tags) ? payload.tags.filter((item): item is string => typeof item === "string") : undefined,
+      source: typeof payload.source === "string" ? payload.source : undefined,
+      status: typeof payload.status === "number" ? payload.status : undefined,
+      release_date: typeof payload.release_date === "string" ? payload.release_date : undefined,
+      is_all_ages: typeof payload.is_all_ages === "boolean" ? payload.is_all_ages : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+};
+
+const formatLastQARjInfoMessage = (sessionMessages: ChatHistoryMessage[]): string => {
+  const summary = extractLastQARjInfo(sessionMessages);
+  if (!summary.range) {
+    return "上一轮 QA 尚未完成，无法提取 RJ 信息。";
+  }
+
+  const resolvedTextOnlyItems = summary.textOnlyCodes
+    .map(loadRjInfoFromDatabase)
+    .filter((item): item is LastQARjInfoItem => Boolean(item));
+  const unresolvedTextOnlyCodes = summary.textOnlyCodes.filter(
+    (code) => !resolvedTextOnlyItems.some((item) => item.rj_code === code),
+  );
+  const allItems = [...summary.items];
+  for (const item of resolvedTextOnlyItems) {
+    if (!allItems.some((existing) => existing.rj_code === item.rj_code)) {
+      allItems.push(item);
+    }
+  }
+  allItems.sort((a, b) => a.rj_code.localeCompare(b.rj_code));
+
+  if (allItems.length === 0 && unresolvedTextOnlyCodes.length === 0) {
+    return "上一轮 QA 未找到 RJ 详情信息。";
+  }
+
+  const sections: string[] = [];
+  if (allItems.length > 0) {
+    sections.push("上一轮 QA 的 RJ 详情：");
+    for (const item of allItems) {
+      sections.push(...formatLastQARjInfoItem(item));
+      const matched = summary.matchedSources.find((entry) => entry.rj_code === item.rj_code);
+      if (matched?.source || matched?.status === "matched") {
+        const extras = [matched.source ? `来源匹配：${matched.source}` : undefined, matched.status === "matched" ? "匹配状态：matched" : undefined]
+          .filter((value): value is string => Boolean(value));
+        if (extras.length > 0) {
+          sections.push(...extras.map((value) => `  ${value}`));
+        }
+      }
+      sections.push("");
+    }
+    if (sections[sections.length - 1] === "") sections.pop();
+  }
+
+  if (resolvedTextOnlyItems.length > 0) {
+    if (sections.length > 0) sections.push("");
+    sections.push(`已从本地库补全：${resolvedTextOnlyItems.map((item) => item.rj_code).join("、")}`);
+  }
+
+  if (unresolvedTextOnlyCodes.length > 0) {
+    if (sections.length > 0) sections.push("");
+    sections.push(`仅文本提到：${unresolvedTextOnlyCodes.join("、")}`);
+  }
+
+  return sections.join("\n");
+};
 
 /** 主应用类，管理 TUI 布局、消息历史和 AI 交互 */
 export class RJApp {
@@ -462,7 +558,7 @@ export class RJApp {
         assistant,
         sessionStartIndex,
         promptText: submission.promptText,
-        restoreText: submission.displayText,
+        restoreText: submission.kind === "command" ? submission.displayText : submission.promptText,
       };
       await streamChat({
         provider,
@@ -1046,6 +1142,14 @@ export class RJApp {
 
     if (action.type === "show-session-selector") {
       this.showSessionSelector();
+      this.requestRender();
+      return true;
+    }
+
+    if (action.type === "show-last-qa-rj-info") {
+      const displayText = "/info";
+      this.addMessage("command", displayText, "qa");
+      this.addMessage("assistant", formatLastQARjInfoMessage(this.sessionMessages), "RJ");
       this.requestRender();
       return true;
     }

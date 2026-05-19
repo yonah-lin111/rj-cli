@@ -35,6 +35,7 @@ export type CommandAction =
   | { type: "show-circle-selector" }
   | { type: "show-works-selector" }
   | { type: "show-session-selector" }
+  | { type: "show-last-qa-rj-info" }
   | { type: "clear"; messages?: string[] }
   | { type: "undo" }
   | { type: "quit" }
@@ -157,6 +158,12 @@ const commandList: SlashCommand[] = [
     usage: "/session",
     description: "Browse and restore chat history.",
     handler: () => ({ type: "show-session-selector" }),
+  },
+  {
+    name: "/info",
+    usage: "/info",
+    description: "Show RJ info from the last completed QA.",
+    handler: () => ({ type: "show-last-qa-rj-info" }),
   },
   {
     name: "/quit",
