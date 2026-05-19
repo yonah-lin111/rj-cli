@@ -364,7 +364,7 @@ const commandList: SlashCommand[] = [
           displayText: `/uploadMegaFile -[${sourcePath}]`,
           questions: buildUploadMegaFileConfirmQuestions(uploadPlan),
           uploadPlan: { sourcePath: uploadPlan.sourcePath, targetPath: uploadPlan.targetPath },
-          cancelMessage: "Upload cancelled. File was not replaced.",
+          cancelMessage: "Upload cancelled. The file was not replaced.",
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

@@ -31,7 +31,7 @@ export const handleCircleSelectionAction = async (
   }
 
   if (!selection.circleName) {
-    deps.addMessage("system", "当前本地数据库中没有社团记录", "result");
+    deps.addMessage("system", "No circle records found in the local database.", "result");
     deps.requestRender();
     return {};
   }

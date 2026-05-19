@@ -18,7 +18,7 @@ const commandContext: AppCommandContext = {
   startedAt: new Date("2026-05-19T00:00:00.000Z"),
 };
 
-test("/setting 命令说明使用英文提示", () => {
+test("/setting command description uses English text", () => {
   const command = getCommands().find((item) => item.name === "/setting");
 
   assert.ok(command);

@@ -59,20 +59,20 @@ import { findLastQAPair, trimLastSessionQA, extractLastQARjInfo, type LastQARjIn
 
 const formatLastQARjInfoValue = (label: string, value: string | number | boolean | undefined): string | undefined => {
   if (value === undefined || value === "") return undefined;
-  return `${label}：${String(value)}`;
+  return `${label}: ${String(value)}`;
 };
 
 const formatLastQARjInfoItem = (item: LastQARjInfoItem): string[] => {
   const lines = [item.rj_code];
   const values = [
-    formatLastQARjInfoValue("标题", item.title),
-    formatLastQARjInfoValue("社团", item.circle),
+    formatLastQARjInfoValue("Title", item.title),
+    formatLastQARjInfoValue("Circle", item.circle),
     formatLastQARjInfoValue("CV", item.cv),
-    item.tags?.length ? `标签：${item.tags.join("、")}` : undefined,
-    formatLastQARjInfoValue("来源", item.source),
-    formatLastQARjInfoValue("状态", item.status),
-    formatLastQARjInfoValue("发售日", item.release_date),
-    item.is_all_ages === undefined ? undefined : `全年龄：${item.is_all_ages ? "是" : "否"}`,
+    item.tags?.length ? `Tags: ${item.tags.join(", ")}` : undefined,
+    formatLastQARjInfoValue("Source", item.source),
+    formatLastQARjInfoValue("Status", item.status),
+    formatLastQARjInfoValue("Release date", item.release_date),
+    item.is_all_ages === undefined ? undefined : `All ages: ${item.is_all_ages ? "Yes" : "No"}`,
   ].filter((value): value is string => Boolean(value));
   return values.length > 0 ? [...lines, ...values.map((value) => `  ${value}`)] : lines;
 };
@@ -101,9 +101,9 @@ const loadRjInfoFromDatabase = (rjCode: string): LastQARjInfoItem | undefined =>
 const formatSpecifiedRjInfoMessage = (rjCode: string): string => {
   const item = loadRjInfoFromDatabase(rjCode);
   if (!item) {
-    return `未在本地库中找到 ${rjCode} 的信息。`;
+    return `No local record found for ${rjCode}.`;
   }
-  return [`指定 RJ 详情：`, ...formatLastQARjInfoItem(item)].join("\n");
+  return [`Specified RJ details:`, ...formatLastQARjInfoItem(item)].join("\n");
 };
 
 const formatLastQARjInfoMessage = (sessionMessages: ChatHistoryMessage[], rjCode?: string): string => {
@@ -112,7 +112,7 @@ const formatLastQARjInfoMessage = (sessionMessages: ChatHistoryMessage[], rjCode
   }
   const summary = extractLastQARjInfo(sessionMessages);
   if (!summary.range) {
-    return "上一轮 QA 尚未完成，无法提取 RJ 信息。";
+    return "The last QA is not complete yet, so RJ info cannot be extracted.";
   }
 
   const resolvedTextOnlyItems = summary.textOnlyCodes
@@ -130,17 +130,17 @@ const formatLastQARjInfoMessage = (sessionMessages: ChatHistoryMessage[], rjCode
   allItems.sort((a, b) => a.rj_code.localeCompare(b.rj_code));
 
   if (allItems.length === 0 && unresolvedTextOnlyCodes.length === 0) {
-    return "上一轮 QA 未找到 RJ 详情信息。";
+    return "No RJ details were found in the last QA.";
   }
 
   const sections: string[] = [];
   if (allItems.length > 0) {
-    sections.push("上一轮 QA 的 RJ 详情：");
+    sections.push("RJ details from the last QA:");
     for (const item of allItems) {
       sections.push(...formatLastQARjInfoItem(item));
       const matched = summary.matchedSources.find((entry) => entry.rj_code === item.rj_code);
       if (matched?.source || matched?.status === "matched") {
-        const extras = [matched.source ? `来源匹配：${matched.source}` : undefined, matched.status === "matched" ? "匹配状态：matched" : undefined]
+        const extras = [matched.source ? `Matched source: ${matched.source}` : undefined, matched.status === "matched" ? "Match status: matched" : undefined]
           .filter((value): value is string => Boolean(value));
         if (extras.length > 0) {
           sections.push(...extras.map((value) => `  ${value}`));
@@ -153,12 +153,12 @@ const formatLastQARjInfoMessage = (sessionMessages: ChatHistoryMessage[], rjCode
 
   if (resolvedTextOnlyItems.length > 0) {
     if (sections.length > 0) sections.push("");
-    sections.push(`已从本地库补全：${resolvedTextOnlyItems.map((item) => item.rj_code).join("、")}`);
+    sections.push(`Filled from local records: ${resolvedTextOnlyItems.map((item) => item.rj_code).join(", ")}`);
   }
 
   if (unresolvedTextOnlyCodes.length > 0) {
     if (sections.length > 0) sections.push("");
-    sections.push(`仅文本提到：${unresolvedTextOnlyCodes.join("、")}`);
+    sections.push(`Mentioned in text only: ${unresolvedTextOnlyCodes.join(", ")}`);
   }
 
   return sections.join("\n");
@@ -920,14 +920,14 @@ export class RJApp {
                     this.requestRender();
                     if (event.step === "error") {
                       isError = true;
-                      entry.resultLabel = "处理失败";
+                      entry.resultLabel = "Failed";
                     }
                   }
                   resultText = events.join("\n");
                 } catch (e) {
-                  resultText = `处理异常: ${e instanceof Error ? e.message : String(e)}`;
+                  resultText = `Processing error: ${e instanceof Error ? e.message : String(e)}`;
                   isError = true;
-                  entry.resultLabel = "处理失败";
+                  entry.resultLabel = "Failed";
                   entry.resultText = resultText;
                 }
               } else if (call.name === "explore") {

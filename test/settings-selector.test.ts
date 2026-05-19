@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SettingsSelector } from "../src/ui/settings-selector.ts";
 
-test("SettingsSelector 在无匹配项时显示英文提示", () => {
+test("SettingsSelector shows English text when no items match", () => {
   const selector = new SettingsSelector(
     [{ key: "showThinking", label: "showThinking", description: "Show assistant thinking content in chat messages" }],
     { showThinking: false },
