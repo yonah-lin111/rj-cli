@@ -1,131 +1,155 @@
 # RJ CLI
 
-一个面向 RJ 作品管理场景的本地交互式 CLI，集成终端 TUI、嵌入式 Web UI、本地 SQLite 数据库以及资源匹配/音频整理能力。
+A local interactive CLI for RJ work management, combining a terminal TUI, an embedded Web UI, local SQLite storage, ranking ingestion, resource matching, and local audio/workflow processing.
 
-## 功能简介
+## Overview
 
-- 在终端中以交互式 TUI 方式使用 AI 与本地工具协作。
-- 管理本地 RJ 数据，包括排行榜作品、社团、作品状态与会话记录。
-- 提供嵌入式 Web UI，用于查看和操作排行榜、社团、作品列表。
-- 支持从排行榜抓取作品信息并写入本地数据库缓存。
-- 支持匹配 Mega 与 ASMR.ONE 资源。
-- 支持对本地作品文件夹执行预览、封面选择、格式转换与输出整理。
-- 支持子代理探索模式，用于多文件只读分析。
+- Use AI together with local tools inside an interactive terminal TUI.
+- Manage local RJ data including ranked works, circles, work status, and chat sessions.
+- Provide an embedded Web UI for viewing and operating on rankings, circles, works, and local work-processing tasks.
+- Fetch ranking data, inspect work details, and cache structured information into a local database.
+- Match Mega and ASMR.ONE resources for local works.
+- Process local work folders with preview, cover selection, overwrite confirmation, format conversion, and organized output.
+- Support a read-only subagent exploration mode for multi-file analysis.
 
-## 主要能力
+## Core Capabilities
 
-### 1. 终端交互
+### 1. Terminal Interaction
 
-CLI 入口位于 `src/cli.ts`，启动后会进入基于 `@mariozechner/pi-tui` 构建的终端界面。
+The CLI entry point is `src/cli.ts`. After startup, it enters a terminal UI built with `@mariozechner/pi-tui`.
 
-内置能力包括：
+Built-in capabilities include:
 
-- 模型切换
-- 会话保存与恢复
-- 斜杠命令执行
-- Ask 交互提问
-- Bash / 读写文件 / Todo 等工具调用
-- Subagent 只读探索
+- Model switching
+- Settings selection
+- Session save and restore
+- Slash command execution
+- Interactive Ask prompts
+- Tool calls such as Bash / file read-write / Todo
+- Read-only subagent exploration
+- Embedded Web UI launching
 
-### 2. RJ 数据管理
+### 2. RJ Data Management
 
-本地数据主要保存在 `~/.RJ/`：
+Local data is mainly stored under `~/.RJ/`:
 
-- `~/.RJ/rj.db`：SQLite 数据库
-- `~/.RJ/sessions/`：聊天会话历史
-- `~/.RJ/config.json`：配置文件
-- 其他缓存与产物目录
+- `~/.RJ/rj.db`: SQLite database
+- `~/.RJ/sessions/`: chat session history
+- `~/.RJ/config.json`: configuration file
+- Other cache and artifact directories
 
-支持的数据操作包括：
+Supported data operations include:
 
-- 获取排行榜并缓存
-- 添加/移除 RJ 作品
-- 添加/移除社团
-- 查询社团详情与社团作品
-- 查询本地作品列表并更新状态
-- 生成本地数据库概览
+- Fetching and caching ranking data
+- Adding or removing RJ works
+- Adding or removing circles
+- Querying RJ info from the last QA result or a specified RJ code
+- Querying circle details, circle works, and latest circle works
+- Querying local work lists and updating work status
+- Generating local database overview summaries
+- Copying selected local files into `~/.RJ/`
 
 ### 3. Web UI
 
-项目内置 `web/` React 19 + Vite 前端，可用于图形化查看和操作数据。
+The project includes a React 19 + Vite frontend in `web/` for graphical data viewing and operations.
 
-当前页面包括：
+Current pages include:
 
-- `RankPage`：排行榜管理
-- `CirclePage`：社团管理
-- `WorksPage`：作品列表与资源匹配
-- `WorkOpsPage`：本地作品处理页面
+- `RankPage`: ranking management
+- `CirclePage`: circle management
+- `WorksPage`: work list, status updates, deletion, and resource matching
+- `WorkOpsPage`: local work preview and processing page
 
-CLI 启动时会自动拉起本地 HTTP 服务；在 `RJ_WEB_DEV=1` 下也可对接 Vite 开发服务器。
+The CLI starts a local HTTP server automatically. The embedded backend serves the following page routes:
 
-### 4. 本地作品处理
+- `/rank`
+- `/circle`
+- `/works`
+- `/work-ops`
 
-`src/tools/rj-server/work-ops.ts` 提供本地音频文件夹处理能力，适合整理作品目录。
+When `RJ_WEB_DEV=1` is enabled, the CLI can also connect to the Vite development server and spawn the frontend dev process automatically.
 
-支持流程包括：
+### 4. Local Work Processing
 
-- 从文件夹名中提取 RJ 编号
-- 扫描音频文件、图片文件与其他文件
-- 预览输出目录结构
-- 选择封面图
-- 调用 `ffmpeg` 进行格式转换
-- 批量复制/整理输出文件
-- 单文件夹与多文件夹两种模式
+`src/tools/rj-server/work-ops.ts` provides local audio folder processing workflows for organizing work directories.
 
-### 5. 资源匹配
+Supported flow includes:
 
-当前支持以下资源匹配能力：
+- Extracting RJ IDs from folder names
+- Scanning audio files, image files, and other files
+- Previewing output directory structure before execution
+- Selecting a cover image
+- Choosing output base path
+- Choosing target format (`flac`, `mp3`, or no conversion)
+- Configuring worker thread count
+- Selecting subfolders in multi-folder mode
+- Confirming overwrite behavior
+- Calling `ffmpeg` for format conversion
+- Batch copying and organizing output files
+- Single-folder and multi-folder modes
 
-- Mega 资源匹配
-- ASMR.ONE 资源匹配
+### 5. Resource Matching
 
-相关逻辑位于：
+The project currently supports the following resource matching features:
+
+- Mega resource matching
+- ASMR.ONE resource matching
+
+Related logic is located in:
 
 - `src/tools/rj-server/resource-match.ts`
 - `src/tools/rj-server/index.ts`
 - `web/src/pages/WorksPage.tsx`
 
-## 安装要求
+## Requirements
 
 - Node.js >= 20
 - pnpm
-- macOS / Linux 环境下可用的终端
-- 若需要本地音频处理，需额外安装 `ffmpeg`
+- A usable terminal on macOS / Linux
+- `ffmpeg` if local audio processing is needed
 
-## 安装依赖
+## Install Dependencies
 
-在项目根目录执行：
+Run in the project root:
 
 ```bash
 pnpm install
 ```
 
-如需构建 Web 前端，根目录脚本会自动进入 `web/` 安装其依赖。
+If the Web frontend needs to be built, the root scripts will also install dependencies in `web/` automatically.
 
-## 启动方式
+## Getting Started
 
-### 启动 CLI
+### Start the CLI
 
 ```bash
 pnpm dev
 ```
 
-### 查看帮助
+### Show help
 
 ```bash
 node dist/cli.js --help
 ```
 
-开发阶段也可直接参考入口参数逻辑：
+During development, you can also use the entry arguments directly:
 
 ```bash
 pnpm dev --help
 pnpm dev --version
 ```
 
-## 常用开发命令
+### Run against the Vite dev server
 
-### 根目录
+Start the web app in development mode and let the CLI proxy to it:
+
+```bash
+RJ_WEB_DEV=1 pnpm dev
+```
+
+## Common Development Commands
+
+### Root directory
 
 ```bash
 pnpm dev
@@ -134,16 +158,16 @@ pnpm test
 pnpm build:web
 ```
 
-说明：
+Descriptions:
 
-- `pnpm dev`：启动 CLI 开发模式
-- `pnpm typecheck`：执行 TypeScript 类型检查
-- `pnpm test`：运行根目录测试
-- `pnpm build:web`：安装并构建 Web 前端
+- `pnpm dev`: start the CLI in development mode
+- `pnpm typecheck`: run TypeScript type checking
+- `pnpm test`: run root tests
+- `pnpm build:web`: install and build the Web frontend
 
-### Web 目录
+### Web directory
 
-在 `web/` 目录执行：
+Run inside `web/`:
 
 ```bash
 pnpm install
@@ -152,19 +176,21 @@ pnpm build
 pnpm preview
 ```
 
-## 典型斜杠命令
+## Common Slash Commands
 
-根据当前代码，内置了以下常用命令：
+Based on the current codebase, the following built-in commands are commonly available:
 
 - `/help`
-- `/model`
+- `/model [search]`
+- `/setting`
 - `/webUI`
 - `/rank`
-- `/matchMega`
-- `/matchASMROne`
+- `/matchMega [RJ code]`
+- `/matchASMROne [RJ code]`
 - `/circle`
 - `/works`
 - `/session`
+- `/info [RJ code]`
 - `/overwrite`
 - `/workMatch [path]`
 - `/workMatchMulti [path]`
@@ -173,79 +199,88 @@ pnpm preview
 - `/undo`
 - `/quit`
 
-命令定义位于 `src/core/commands.ts`。
+Notes:
 
-## 项目结构
+- `/info` shows the RJ info from the last completed QA or from the RJ code inside `[]`.
+- `/overwrite` generates a Chinese overview from the local RJ database. It does not overwrite files.
+- `/workMatch` is for a single folder whose audio files are directly under the folder root.
+- `/workMatchMulti` is for a root folder whose subfolders each contain audio files.
+- `/uploadMegaFile` copies a selected local file into `~/.RJ/` and may ask for overwrite confirmation.
+
+Command definitions are located in `src/core/commands.ts`.
+
+## Project Structure
 
 ```text
 .
 ├── src/
-│   ├── cli.ts                 # CLI 入口
-│   ├── app.ts                 # TUI 主应用与交互编排
-│   ├── core/                  # 配置、AI、命令、会话等核心逻辑
-│   ├── app/                   # 页面服务、动作处理、上下文辅助等
-│   ├── tools/                 # Bash / 文件 / RJ 服务 / 本地工具
-│   ├── ui/                    # TUI 组件
-│   ├── prompts/               # 系统提示词与工具描述
-│   └── subagent/              # 子代理运行逻辑
-├── web/                       # React + Vite Web 前端
-├── test/                      # 根目录测试
-└── CLAUDE.md                  # 项目开发约定
+│   ├── cli.ts                 # CLI entry
+│   ├── app.ts                 # Main TUI app and interaction orchestration
+│   ├── core/                  # Config, AI, commands, sessions, and core logic
+│   ├── app/                   # Page services, action handlers, context helpers
+│   ├── tools/                 # Bash / file / RJ service / local tools
+│   ├── ui/                    # TUI components
+│   ├── prompts/               # System prompt and tool descriptions
+│   └── subagent/              # Subagent runtime logic
+├── web/                       # React + Vite Web frontend
+├── test/                      # Root tests
+└── CLAUDE.md                  # Project development conventions
 ```
 
-## 架构概览
+## Architecture Overview
 
-### CLI / TUI 层
+### CLI / TUI Layer
 
-- `src/cli.ts`：处理 `--help`、`--version` 并启动应用
-- `src/app.ts`：主应用类 `RJApp`，编排消息、工具、子代理、会话与本地服务
-- `src/ui/`：终端界面组件
+- `src/cli.ts`: handles `--help`, `--version`, and starts the app
+- `src/app.ts`: main app class `RJApp`, orchestrating messages, tools, subagents, sessions, and local services
+- `src/ui/`: terminal UI components
 
-### AI 与工具层
+### AI and Tool Layer
 
-- `src/core/ai.ts`：流式聊天循环与工具调用
-- `src/prompts/system.ts`：系统提示词
-- `src/tools/base/`：Bash、文件读写、Ask、Todo 等基础工具
-- `src/subagent/runner.ts`：子代理运行逻辑
+- `src/core/ai.ts`: streaming chat loop and tool execution
+- `src/prompts/system.ts`: system prompt
+- `src/tools/base/`: base tools such as Bash, file read-write, Ask, and Todo
+- `src/subagent/runner.ts`: subagent runtime logic
 
-### 数据与服务层
+### Data and Service Layer
 
-- `src/tools/rj-server/db.ts`：SQLite 数据库访问
-- `src/tools/rj-server/index.ts`：RJ 相关工具能力统一出口
-- `src/tools/rj-server/scraper.ts`：DLsite 页面抓取与解析
-- `src/app/rank-page.ts`：嵌入式本地 HTTP 服务
+- `src/tools/rj-server/db.ts`: SQLite database access
+- `src/tools/rj-server/index.ts`: unified entry for RJ-related tool capabilities
+- `src/tools/rj-server/scraper.ts`: DLsite page fetching and parsing
+- `src/app/rank-page.ts`: embedded local HTTP server and `/api/*` routes for the Web UI
 
-### 前端层
+### Frontend Layer
 
 - `web/src/pages/RankPage.tsx`
 - `web/src/pages/CirclePage.tsx`
 - `web/src/pages/WorksPage.tsx`
 - `web/src/pages/WorkOpsPage.tsx`
 
-## 运行细节
+## Runtime Notes
 
-- 持久化数据目录默认在 `~/.RJ/`
-- 默认情况下嵌入式服务会提供构建后的 `web/dist/` 静态资源
-- 当设置 `RJ_WEB_DEV=1` 时，CLI 会尝试配合 `web/` 下的 Vite 开发服务器工作
-- 某些抓取功能可能依赖可用网络环境或代理配置
+- Persistent app data is stored under `~/.RJ/`
+- By default, the embedded server serves built static assets from `web/dist/`
+- When `RJ_WEB_DEV=1` is set, the CLI can work with the Vite development server and start the frontend dev process automatically
+- Some scraping features may depend on available network access or proxy configuration
 
-## 开发约定摘要
+## Development Conventions Summary
 
-项目当前约定包括：
+Current project conventions include:
 
-- 函数优先使用箭头函数
-- 对外可扩展对象结构优先使用 `interface`
-- 类型运算与联合类型优先使用 `type`
-- 注释使用中文
+- Prefer arrow functions
+- Prefer `interface` for externally extensible object shapes
+- Prefer `type` for type operations and union types
+- Use Chinese for code comments
 
-详细规范见 `CLAUDE.md`。
+See `CLAUDE.md` for full conventions.
 
-## 适用场景
+## Use Cases
 
-这个项目适合用于：
+This project is suitable for:
 
-- 本地 RJ 数据归档与管理
-- 从排行榜快速入库作品与社团信息
-- 图形化查看本地作品与社团数据
-- 对本地音频作品目录执行整理与格式转换
-- 借助 AI + 工具流完成半自动化操作
+- Local RJ data archiving and management
+- Quickly importing works and circle information from rankings
+- Viewing local work and circle data through an embedded Web UI
+- Matching works against Mega and ASMR.ONE resources
+- Organizing and converting local audio work folders
+- Completing semi-automated workflows with AI + tools
